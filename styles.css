@@ -1,0 +1,563 @@
+/* =============================================
+   Distill Layout Plugin - CSS
+   Distill.pub-inspired three-column reading layout
+   ============================================= */
+
+/* ── CSS Custom Properties (defaults, overridden by JS) ── */
+:root {
+	--distill-toc-width: 180px;
+	--distill-toc-font-size: 80%;
+	--distill-sidenote-width: 220px;
+	--distill-sidenote-font-size: 85%;
+	--distill-sidenote-bg: transparent;
+	--distill-sidenote-text: rgba(0, 0, 0, 0.54);
+	--distill-sidenote-border: transparent;
+	--distill-gutter-width: 20px;
+}
+
+.theme-dark {
+	--distill-sidenote-text: rgba(255, 255, 255, 0.6);
+}
+
+/* =============================================
+   Overflow Chain - CRITICAL for margin content
+   Only active when the plugin is loaded (body class scoped)
+   ============================================= */
+
+/* Intermediates: BOTH axes visible (prevents CSS overflow coercion) */
+body.distill-layout-active .workspace-leaf-content[data-type="markdown"] .view-content,
+body.distill-layout-active .workspace-leaf-content[data-type="markdown"] .markdown-reading-view,
+body.distill-layout-active .workspace-leaf-content[data-type="markdown"] .markdown-preview-view,
+body.distill-layout-active .workspace-leaf-content[data-type="markdown"] .markdown-preview-sizer,
+body.distill-layout-active .workspace-leaf-content[data-type="markdown"] .markdown-preview-section {
+	overflow: visible !important;
+}
+
+/* The leaf-content itself: scrolls vertically (don't set overflow-x separately — coercion makes it pointless) */
+body.distill-layout-active .workspace-leaf-content[data-type="markdown"] {
+	overflow-y: auto !important;
+}
+
+/* Split pane support */
+body.distill-layout-active .workspace-split.mod-vertical {
+	overflow: visible !important;
+}
+
+/* Add padding so columns fit within the scrollable content area (wide mode only) */
+body.distill-layout-active .markdown-preview-view:not(.distill-narrow) {
+	padding-left: calc(var(--distill-toc-width) + var(--distill-gutter-width) + 10px) !important;
+	padding-right: calc(var(--distill-sidenote-width) + var(--distill-gutter-width) + 10px) !important;
+}
+
+/* 1b: Swapped layout — TOC right, sidenotes left */
+body.distill-layout-swapped.distill-layout-active .markdown-preview-view:not(.distill-narrow) {
+	padding-left: calc(var(--distill-sidenote-width) + var(--distill-gutter-width) + 10px) !important;
+	padding-right: calc(var(--distill-toc-width) + var(--distill-gutter-width) + 10px) !important;
+}
+
+/* 3c: Alternating layout — sidenotes on both sides, symmetric padding */
+body.distill-layout-alternating.distill-layout-active .markdown-preview-view:not(.distill-narrow) {
+	padding-left: calc(var(--distill-sidenote-width) + var(--distill-gutter-width) + 10px) !important;
+	padding-right: calc(var(--distill-sidenote-width) + var(--distill-gutter-width) + 10px) !important;
+}
+
+/* Ensure sizer is the positioning context for absolute columns */
+body.distill-layout-active .markdown-preview-sizer {
+	position: relative;
+}
+
+/* Preserve horizontal scroll on code blocks */
+body.distill-layout-active .markdown-preview-view pre {
+	overflow-x: auto;
+}
+
+/* =============================================
+   Column Containers
+   Absolutely positioned inside .markdown-preview-sizer
+   ============================================= */
+
+.distill-left-column,
+.distill-right-column {
+	position: absolute;
+	top: 0;
+	height: 100%;
+	overflow: visible;
+	pointer-events: none;
+}
+
+.distill-left-column > *,
+.distill-right-column > * {
+	pointer-events: auto;
+}
+
+.distill-left-column {
+	width: var(--distill-toc-width);
+	right: calc(100% + var(--distill-gutter-width));
+}
+
+.distill-right-column {
+	width: var(--distill-sidenote-width);
+	left: calc(100% + var(--distill-gutter-width));
+}
+
+/* =============================================
+   TOC - Left Column
+   ============================================= */
+
+.distill-toc {
+	position: sticky;
+	top: 20px;
+	max-height: calc(100vh - 40px);
+	overflow-y: auto;
+	-ms-overflow-style: none;
+	scrollbar-width: none;
+}
+
+.distill-toc::-webkit-scrollbar {
+	display: none;
+}
+
+.distill-toc-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.distill-toc-item {
+	margin: 0;
+	padding: 0;
+	border-left: 2px solid transparent;
+	transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.distill-toc-link {
+	display: block;
+	padding: 3px 0 3px 10px;
+	font-size: var(--distill-toc-font-size);
+	color: var(--text-muted);
+	text-decoration: none;
+	line-height: 1.4;
+	transition: color 0.15s ease;
+}
+
+.distill-toc-link:hover {
+	color: var(--text-normal);
+}
+
+/* Heading level indentation */
+.distill-toc-h2 .distill-toc-link {
+	padding-left: 18px;
+}
+
+.distill-toc-h3 .distill-toc-link {
+	padding-left: 26px;
+	font-size: calc(var(--distill-toc-font-size) * 0.92);
+}
+
+.distill-toc-h4 .distill-toc-link {
+	padding-left: 34px;
+	font-size: calc(var(--distill-toc-font-size) * 0.85);
+}
+
+.distill-toc-h5 .distill-toc-link,
+.distill-toc-h6 .distill-toc-link {
+	padding-left: 42px;
+	font-size: calc(var(--distill-toc-font-size) * 0.8);
+}
+
+/* Active heading highlight */
+.distill-toc-active {
+	border-left-color: var(--text-accent);
+}
+
+.distill-toc-active .distill-toc-link {
+	color: var(--text-accent);
+	font-weight: 500;
+}
+
+/* =============================================
+   Sidenotes - Right Column
+   Clean Distill aesthetic: minimal, no borders
+   ============================================= */
+
+.distill-sidenote {
+	position: absolute;
+	width: var(--distill-sidenote-width);
+	font-size: var(--distill-sidenote-font-size);
+	font-family: var(--distill-sidenote-font, inherit);
+	line-height: 1.4;
+	color: var(--distill-sidenote-text);
+	background: var(--distill-sidenote-bg);
+	box-sizing: border-box;
+}
+
+.distill-sidenote-number {
+	font-size: 0.8em;
+	font-weight: 600;
+	color: var(--text-accent);
+	vertical-align: super;
+	line-height: 0;
+	margin-right: 2px;
+}
+
+.distill-sidenote-content {
+	display: inline;
+}
+
+/* 1a: Rich markdown content inside sidenotes */
+.distill-sidenote-content p {
+	margin: 0.3em 0;
+}
+
+.distill-sidenote-content p:first-child {
+	margin-top: 0;
+	display: inline;
+}
+
+.distill-sidenote-content img {
+	max-width: 100%;
+	height: auto;
+}
+
+.distill-sidenote-content code {
+	font-size: 0.9em;
+}
+
+.distill-sidenote-content ul,
+.distill-sidenote-content ol {
+	margin: 0.3em 0;
+	padding-left: 1.2em;
+}
+
+/* 1c: Cross-ref click — pointer on sidenote numbers */
+.distill-sidenote-number {
+	cursor: pointer;
+}
+
+/* 3a: Number badge styles */
+.distill-badge-circled {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.4em;
+	height: 1.4em;
+	border: 1.5px solid var(--text-accent);
+	border-radius: 50%;
+	font-size: 0.7em;
+	font-weight: 600;
+	color: var(--text-accent);
+	vertical-align: middle;
+	line-height: 1;
+}
+
+.distill-badge-pill {
+	display: inline-block;
+	padding: 0.1em 0.45em;
+	border-radius: 9999px;
+	background: var(--text-accent);
+	color: var(--background-primary);
+	font-size: 0.7em;
+	font-weight: 600;
+	vertical-align: middle;
+	line-height: 1.2;
+}
+
+/* Badge styles for inline labels (narrow mode) */
+.distill-inline-label.distill-badge-circled {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.4em;
+	height: 1.4em;
+	border: 1.5px solid var(--text-accent);
+	border-radius: 50%;
+	font-size: 0.7em;
+	vertical-align: middle;
+	line-height: 1;
+	padding: 0;
+}
+
+.distill-inline-label.distill-badge-pill {
+	padding: 0.1em 0.45em;
+	border-radius: 9999px;
+	background: var(--text-accent);
+	color: var(--background-primary);
+	font-size: 0.7em;
+	vertical-align: middle;
+	line-height: 1.2;
+}
+
+/* 1d: Hover highlight */
+.distill-highlight {
+	background-color: var(--text-highlight-bg) !important;
+	border-radius: 2px;
+	transition: background-color 0.15s ease;
+}
+
+.distill-sidenote.distill-highlight {
+	background-color: var(--text-highlight-bg) !important;
+}
+
+/* 2a: Collapsible sidenotes */
+.distill-sidenote-collapsed {
+	overflow: hidden;
+	position: absolute; /* keep absolute positioning */
+}
+
+.distill-sidenote-collapsed::after {
+	content: '';
+	position: absolute;
+	bottom: 18px;
+	left: 0;
+	right: 0;
+	height: 30px;
+	background: linear-gradient(transparent, var(--distill-sidenote-bg, var(--background-primary)));
+	pointer-events: none;
+}
+
+.distill-sidenote-expand {
+	display: block;
+	width: 100%;
+	padding: 2px 0;
+	margin-top: 2px;
+	border: none;
+	background: none;
+	color: var(--text-accent);
+	font-size: 0.75em;
+	cursor: pointer;
+	text-align: left;
+	opacity: 0.8;
+}
+
+.distill-sidenote-expand:hover {
+	opacity: 1;
+	text-decoration: underline;
+}
+
+/* 2b: Hover preview mode — sidenotes hidden by default */
+.distill-hover-hidden {
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.15s ease;
+}
+
+.distill-sidenote-visible {
+	opacity: 1 !important;
+	pointer-events: auto !important;
+	transition: opacity 0.15s ease;
+}
+
+/* Hide original footnote ref text — replaced by plugin numbering.
+   font-size:0 keeps the element in flow for positioning. */
+[data-distill-sidenote-rendered="true"]:not(.distill-sidenote-marker) {
+	font-size: 0 !important;
+	line-height: 0 !important;
+	overflow: hidden;
+}
+
+/* Sidenote marker for custom {>text} syntax */
+.distill-sidenote-marker {
+	display: inline;
+	cursor: default;
+}
+
+.distill-sidenote-marker::after {
+	content: '\203B';
+	color: var(--text-accent);
+	font-size: 80%;
+	vertical-align: super;
+	margin-left: 1px;
+}
+
+/* =============================================
+   Inline Sidenote Fallback (Narrow Mode)
+   Hidden by default, shown when columns collapse
+   ============================================= */
+
+.distill-inline-sidenote {
+	display: none;
+}
+
+.distill-inline-toggle {
+	display: none;
+}
+
+.distill-inline-label {
+	cursor: pointer;
+	color: var(--text-accent);
+	font-size: 0.75em;
+	vertical-align: super;
+	font-weight: 600;
+	padding: 0 2px;
+	border-radius: 2px;
+	transition: background-color 0.15s ease;
+}
+
+.distill-inline-label:hover {
+	background-color: var(--background-secondary);
+}
+
+.distill-inline-content {
+	display: none;
+	font-size: var(--distill-sidenote-font-size);
+	color: var(--text-muted);
+	padding: 0.2em 0;
+	margin: 0.3em 0;
+}
+
+.distill-inline-toggle:checked + .distill-inline-label + .distill-inline-content {
+	display: block;
+}
+
+.distill-inline-toggle:checked + .distill-inline-label {
+	background-color: var(--text-accent);
+	color: var(--background-primary);
+}
+
+/* ── Margin Note Inline Fallback (Narrow Mode) ── */
+
+.distill-inline-marginnote {
+	display: none;
+}
+
+.distill-inline-marginnote-content {
+	display: block;
+	font-size: var(--distill-sidenote-font-size);
+	color: var(--text-muted);
+	padding: 0.2em 0;
+	margin: 0.3em 0;
+}
+
+/* Footnotes section is hidden via JS after sidenotes render successfully.
+   This avoids hiding footnotes when sidenotes fail to render. */
+
+/* =============================================
+   Edit Mode — Source & Live Preview
+   Columns as siblings of .cm-editor inside .markdown-source-view
+   ============================================= */
+
+/* Edit mode: positioning context */
+body.distill-layout-active .markdown-source-view.distill-edit-active {
+	position: relative;
+}
+
+/* Edit mode: padding for columns (wide mode only) */
+body.distill-layout-active .markdown-source-view.distill-edit-active:not(.distill-narrow) {
+	padding-left: calc(var(--distill-toc-width) + var(--distill-gutter-width) + 10px) !important;
+	padding-right: calc(var(--distill-sidenote-width) + var(--distill-gutter-width) + 10px) !important;
+}
+
+/* Swapped layout in edit mode */
+body.distill-layout-swapped.distill-layout-active .markdown-source-view.distill-edit-active:not(.distill-narrow) {
+	padding-left: calc(var(--distill-sidenote-width) + var(--distill-gutter-width) + 10px) !important;
+	padding-right: calc(var(--distill-toc-width) + var(--distill-gutter-width) + 10px) !important;
+}
+
+/* Alternating layout in edit mode */
+body.distill-layout-alternating.distill-layout-active .markdown-source-view.distill-edit-active:not(.distill-narrow) {
+	padding-left: calc(var(--distill-sidenote-width) + var(--distill-gutter-width) + 10px) !important;
+	padding-right: calc(var(--distill-sidenote-width) + var(--distill-gutter-width) + 10px) !important;
+}
+
+/* Edit mode column containers */
+.distill-edit-left-column {
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: var(--distill-toc-width);
+	pointer-events: none;
+	z-index: 10;
+}
+
+.distill-edit-left-column > * {
+	pointer-events: auto;
+}
+
+.distill-edit-right-column {
+	position: absolute;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	width: var(--distill-sidenote-width);
+	overflow: hidden;
+	pointer-events: none;
+	z-index: 10;
+}
+
+.distill-edit-right-column > * {
+	pointer-events: auto;
+}
+
+/* Sidenote scroll track — translates with CM scroll */
+.distill-edit-sidenote-track {
+	position: relative;
+	width: 100%;
+	will-change: transform;
+}
+
+/* Narrow mode hides edit columns */
+.distill-narrow .distill-edit-left-column,
+.distill-narrow .distill-edit-right-column {
+	display: none !important;
+}
+
+/* =============================================
+   Narrow / Responsive Mode
+   Triggered via JS class `.distill-narrow`
+   ============================================= */
+
+.distill-narrow .distill-left-column,
+.distill-narrow .distill-right-column {
+	display: none !important;
+}
+
+.distill-narrow .distill-sidenote {
+	display: none !important;
+}
+
+/* Show inline sidenotes in narrow mode */
+.distill-narrow .distill-inline-sidenote {
+	display: inline;
+}
+
+/* Margin notes always visible in narrow mode (no toggle) */
+.distill-narrow .distill-inline-marginnote {
+	display: inline;
+}
+
+/* =============================================
+   Print Styles
+   ============================================= */
+
+@media print {
+	.distill-left-column {
+		display: none !important;
+	}
+
+	.distill-right-column {
+		display: none !important;
+	}
+
+	.distill-inline-sidenote {
+		display: inline !important;
+	}
+
+	.distill-inline-content {
+		display: block !important;
+		break-inside: avoid;
+	}
+
+	.distill-inline-marginnote {
+		display: inline !important;
+	}
+
+	.distill-inline-marginnote-content {
+		display: block !important;
+		break-inside: avoid;
+	}
+
+	body.distill-layout-active .markdown-preview-view section.footnotes {
+		display: block !important;
+	}
+}

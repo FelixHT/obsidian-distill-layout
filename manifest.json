@@ -1,0 +1,9 @@
+{
+	"id": "obsidian-distill-layout",
+	"name": "Distill Layout",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Distill.pub-inspired reading layout with scroll-tracking TOC and margin sidenotes.",
+	"author": "Felix",
+	"isDesktopOnly": false
+}

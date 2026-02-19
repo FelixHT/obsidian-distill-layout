@@ -52,7 +52,7 @@ export function parseEditFootnotes(docText: string, customSyntax: boolean): Edit
  * Find `[^id]: content` definitions, including multi-line continuations
  * (indented lines following the definition).
  */
-function parseDefinitions(docText: string): Map<string, string> {
+export function parseDefinitions(docText: string): Map<string, string> {
 	const defs = new Map<string, string>();
 	const lines = docText.split('\n');
 
@@ -107,17 +107,17 @@ function parseReferences(docText: string): Array<{ id: string; line: number; off
 }
 
 /**
- * Find `{>text}` and `{>id|text}` custom sidenote patterns.
+ * Find `{>text}`, `{>id|text}`, and `{>!icon: text}` custom sidenote patterns.
  */
 function parseCustomSyntax(docText: string): EditParsedFootnote[] {
 	const results: EditParsedFootnote[] = [];
-	const regex = /\{>(?:([^:|]+)\|)?([^}]+)\}/g;
+	const regex = /\{>(?:!(\w+):\s*)?(?:([^:|]+)\|)?([^}]+)\}/g;
 	let match;
 
 	while ((match = regex.exec(docText)) !== null) {
 		const offset = match.index;
 		const line = docText.slice(0, offset).split('\n').length - 1;
-		const content = match[2]!.trim();
+		const content = match[3]!.trim();
 
 		// Generate a deterministic ID from content
 		let hash = 5381;

@@ -1,4 +1,5 @@
 import type { ParsedFootnote, DistillLayoutSettings } from '../types';
+import { parseDefinitions } from './edit-footnote-parser';
 
 /**
  * Parses footnote references and their content from the rendered Reading View DOM.
@@ -14,6 +15,12 @@ export class FootnoteParser {
 
 	updateSettings(settings: DistillLayoutSettings): void {
 		this.settings = settings;
+	}
+
+	/** Disconnect any pending MutationObserver watchers (e.g. on full refresh). */
+	cancelPending(): void {
+		this.pendingObservers.forEach(obs => obs.disconnect());
+		this.pendingObservers.clear();
 	}
 
 	/**
@@ -42,15 +49,36 @@ export class FootnoteParser {
 
 	/**
 	 * Parse all footnotes from the full document (used on file-open).
+	 * If the footnotes section isn't in the DOM yet and onLateResolved is
+	 * provided, sets up a MutationObserver to resolve them when it appears.
 	 */
-	parseFullDocument(previewView: HTMLElement): ParsedFootnote[] {
+	parseFullDocument(
+		previewView: HTMLElement,
+		onLateResolved?: (footnotes: ParsedFootnote[]) => void,
+		sourceText?: string
+	): ParsedFootnote[] {
 		const refs = this.findRefs(previewView);
 		if (refs.length === 0) return [];
 
 		const footnotesSection = this.findFootnotesSection(previewView);
-		if (!footnotesSection) return [];
+		if (footnotesSection) {
+			return this.resolveContent(refs, footnotesSection);
+		}
 
-		return this.resolveContent(refs, footnotesSection);
+		// DOM section not available — try source text fallback
+		if (sourceText) {
+			const defs = parseDefinitions(sourceText);
+			if (defs.size > 0) {
+				const refOrder = this.extractRefOrder(sourceText);
+				return this.resolveFromSource(refs, defs, refOrder);
+			}
+		}
+
+		// Last resort: observe for late-arriving DOM section
+		if (onLateResolved) {
+			this.observeForSection(previewView, refs, onLateResolved);
+		}
+		return [];
 	}
 
 	/**
@@ -71,14 +99,15 @@ export class FootnoteParser {
 			const htmlMarker = marker as HTMLElement;
 			const content = htmlMarker.dataset.sidenoteContent;
 			const id = htmlMarker.dataset.footnoteId;
+			const icon = htmlMarker.dataset.sidenoteIcon;
 			if (content && id) {
-				results.push({ id, refElement: htmlMarker, content, type: 'marginnote' });
+				results.push({ id, refElement: htmlMarker, content, type: 'marginnote', icon: icon || undefined });
 			}
 		}
 
-		// ── Phase B: walk text nodes for new {>text} patterns ──
+		// ── Phase B: walk text nodes for new {>text} patterns (with optional !icon: prefix) ──
 		const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
-		const regex = /\{>(?:([^:|]+)\|)?([^}]+)\}/g;
+		const regex = /\{>(?!fig:)(?:!(\w+):\s*)?(?:([^:|]+)\|)?([^}]+)\}/g;
 
 		const nodesToProcess: { node: Text; matches: RegExpMatchArray[] }[] = [];
 
@@ -105,7 +134,8 @@ export class FootnoteParser {
 
 			for (const match of matches.reverse()) {
 				const fullMatch = match[0]!;
-				const content = match[2]!.trim();
+				const icon = match[1]?.trim() || '';   // capture group 1: icon name
+				const content = match[3]!.trim();      // capture group 3: content (was group 2)
 				const index = currentText.lastIndexOf(fullMatch);
 				if (index === -1) continue;
 
@@ -120,6 +150,9 @@ export class FootnoteParser {
 				marker.dataset.sidenoteContent = content;
 				marker.dataset.footnoteId = id;
 				marker.dataset.sidenoteId = id;
+				if (icon) {
+					marker.dataset.sidenoteIcon = icon;
+				}
 
 				const before = currentText.slice(0, index);
 				const after = currentText.slice(index + fullMatch.length);
@@ -135,6 +168,7 @@ export class FootnoteParser {
 					refElement: marker,
 					content,
 					type: 'marginnote',
+					icon: icon || undefined,
 				});
 
 				currentText = before;
@@ -197,13 +231,13 @@ export class FootnoteParser {
 		// Try data attribute first
 		const dataId = el.getAttribute('data-footnote-id');
 		if (dataId) {
-			const match = dataId.match(/(?:fnref-)?(\d+|[a-zA-Z][\w-]*)/);
+			const match = dataId.match(/(?:fnref-)?(.+?)(?:-[a-f0-9]{4,})?$/);
 			return match?.[1] ?? null;
 		}
 
 		// Try href
 		const href = el.getAttribute('href') || '';
-		const hrefMatch = href.match(/#(?:user-content-)?fn(?:ref)?[-_]?([^-]+)(?:-[a-f0-9]+)?$/i);
+		const hrefMatch = href.match(/#(?:user-content-)?fn(?:ref)?[-_]?(.+?)(?:-[a-f0-9]{4,})?$/i);
 		return hrefMatch?.[1] ?? null;
 	}
 
@@ -253,6 +287,58 @@ export class FootnoteParser {
 		return results;
 	}
 
+	private resolveFromSource(
+		refs: Array<{ el: HTMLElement; id: string }>,
+		definitions: Map<string, string>,
+		refOrder: string[]
+	): ParsedFootnote[] {
+		// Build sequential-number → original-ID mapping.
+		// Obsidian renumbers all footnotes sequentially (1, 2, 3, ...)
+		// by order of first reference, regardless of original ID.
+		const numToId = new Map<string, string>();
+		for (let i = 0; i < refOrder.length; i++) {
+			numToId.set(String(i + 1), refOrder[i]!);
+		}
+
+		const results: ParsedFootnote[] = [];
+		for (const { el, id } of refs) {
+			// Try direct match first (works for numeric IDs like "1", "2")
+			let content = definitions.get(id);
+			// If no direct match, map sequential number to original ID
+			if (!content) {
+				const originalId = numToId.get(id);
+				if (originalId) content = definitions.get(originalId);
+			}
+			if (content) {
+				results.push({ id, refElement: el, content, type: 'sidenote' });
+			}
+		}
+		return results;
+	}
+
+	/**
+	 * Extract unique footnote reference IDs from source text in document order.
+	 * This gives us the sequential numbering Obsidian uses in the rendered DOM.
+	 */
+	private extractRefOrder(sourceText: string): string[] {
+		const seen = new Set<string>();
+		const order: string[] = [];
+		const regex = /\[\^([^\]]+)\](?!:)/g;
+		let match;
+		while ((match = regex.exec(sourceText)) !== null) {
+			const id = match[1]!;
+			// Skip refs inside definition lines (e.g. [^id]: content)
+			const lineStart = sourceText.lastIndexOf('\n', match.index - 1) + 1;
+			const lineText = sourceText.slice(lineStart, sourceText.indexOf('\n', match.index));
+			if (/^\[\^[^\]]+\]:/.test(lineText)) continue;
+			if (!seen.has(id)) {
+				seen.add(id);
+				order.push(id);
+			}
+		}
+		return order;
+	}
+
 	private observeForSection(
 		previewView: HTMLElement,
 		refs: Array<{ el: HTMLElement; id: string }>,
@@ -272,14 +358,6 @@ export class FootnoteParser {
 
 		observer.observe(previewView, { childList: true, subtree: true });
 		this.pendingObservers.set(previewView, observer);
-
-		// Timeout after 5 seconds
-		setTimeout(() => {
-			if (this.pendingObservers.has(previewView)) {
-				observer.disconnect();
-				this.pendingObservers.delete(previewView);
-			}
-		}, 5000);
 	}
 
 	destroy(): void {

@@ -21,13 +21,15 @@ export interface DistillLayoutSettings {
 	crossRefClickEnabled: boolean;
 	/** Hover sidenote highlights ref, hover ref highlights sidenote */
 	hoverHighlight: boolean;
+	/** Suppress Obsidian's native footnote hover popover (since sidenotes show the content) */
+	suppressFootnoteHover: boolean;
 	/** Collapse long sidenotes with a fade-out and expand button */
 	collapsibleSidenotes: boolean;
 	/** Height threshold (px) above which sidenotes collapse */
 	sidenoteCollapseHeight: number;
 	/** Display mode: 'always' shows all sidenotes, 'hover' shows on ref hover */
 	sidenoteDisplayMode: 'always' | 'hover';
-/** Badge style for footnote reference numbers */
+	/** Badge style for footnote reference numbers */
 	numberBadgeStyle: 'superscript' | 'circled' | 'pill';
 	/** Custom font family for sidenotes (empty = inherit) */
 	sidenoteFontFamily: string;
@@ -35,6 +37,61 @@ export interface DistillLayoutSettings {
 	stylePreset: 'custom' | 'tufte' | 'academic' | 'minimal' | 'dark-accent';
 	/** Show TOC and sidenotes in edit mode (experimental) */
 	enableInEditMode: boolean;
+	/** Custom color for TOC link text (empty = theme default) */
+	tocColor: string;
+	/** Custom color for active TOC item highlight (empty = theme default) */
+	tocHighlightColor: string;
+	/** Custom color for sidenote numbers, badges, and markers (empty = theme default) */
+	sidenoteNumberColor: string;
+
+	// ── Reading Progress Bar ──
+	progressBarEnabled: boolean;
+	progressBarColor: string;
+
+	// ── Reading Time ──
+	readingTimeEnabled: boolean;
+	wordsPerMinute: number;
+
+	// ── TOC Section Previews ──
+	tocPreviewsEnabled: boolean;
+	tocPreviewMaxChars: number;
+
+	// ── Annotation Highlighting ──
+	annotationHighlight: boolean;
+
+	// ── Sidenote Animations ──
+	sidenoteAnimations: boolean;
+	sidenoteAnimationStyle: 'fade' | 'slide';
+
+	// ── Multi-pane Sync ──
+	multiPaneSyncEnabled: boolean;
+
+	// ── Margin Figures ──
+	marginFiguresEnabled: boolean;
+	marginFigureMaxHeight: number;
+
+	// ── Margin Code ──
+	marginCodeEnabled: boolean;
+	marginCodeMaxLines: number;
+
+	// ── Margin Comments ──
+	marginCommentsEnabled: boolean;
+	marginCommentColor: string;
+
+	// ── Citations ──
+	citationsEnabled: boolean;
+	citationBibPath: string;
+	citationStyle: 'author-year' | 'numbered';
+
+	// ── Dataview Integration ──
+	dataviewMarginEnabled: boolean;
+
+	// ── Sidenote Icons ──
+	sidenoteIconsEnabled: boolean;
+
+	// ── Bi-directional Sidenote Links ──
+	sidenoteLinksEnabled: boolean;
+	sidenoteBacklinks: boolean;
 }
 
 export const DEFAULT_SETTINGS: DistillLayoutSettings = {
@@ -57,13 +114,42 @@ export const DEFAULT_SETTINGS: DistillLayoutSettings = {
 	columnLayout: 'default',
 	crossRefClickEnabled: true,
 	hoverHighlight: true,
+	suppressFootnoteHover: true,
 	collapsibleSidenotes: true,
 	sidenoteCollapseHeight: 100,
 	sidenoteDisplayMode: 'always',
-numberBadgeStyle: 'superscript',
+	numberBadgeStyle: 'superscript',
 	sidenoteFontFamily: '',
 	stylePreset: 'custom',
 	enableInEditMode: false,
+	tocColor: '',
+	tocHighlightColor: '',
+	sidenoteNumberColor: '',
+
+	// New feature defaults
+	progressBarEnabled: false,
+	progressBarColor: '',
+	readingTimeEnabled: false,
+	wordsPerMinute: 230,
+	tocPreviewsEnabled: false,
+	tocPreviewMaxChars: 120,
+	annotationHighlight: true,
+	sidenoteAnimations: false,
+	sidenoteAnimationStyle: 'fade',
+	multiPaneSyncEnabled: false,
+	marginFiguresEnabled: true,
+	marginFigureMaxHeight: 200,
+	marginCodeEnabled: true,
+	marginCodeMaxLines: 15,
+	marginCommentsEnabled: true,
+	marginCommentColor: '',
+	citationsEnabled: false,
+	citationBibPath: '',
+	citationStyle: 'author-year',
+	dataviewMarginEnabled: false,
+	sidenoteIconsEnabled: true,
+	sidenoteLinksEnabled: true,
+	sidenoteBacklinks: false,
 };
 
 export interface HeadingEntry {
@@ -81,6 +167,16 @@ export interface ParsedFootnote {
 	/** Rich HTML clone of the footnote content (li with backrefs removed). */
 	contentEl?: HTMLElement;
 	type?: 'sidenote' | 'marginnote';
+	/** Icon name for sidenote icon prefix (e.g. 'warning', 'info') */
+	icon?: string;
+}
+
+export interface MarginItem {
+	element: HTMLElement;
+	refElement: HTMLElement;
+	type: 'sidenote' | 'marginnote' | 'figure' | 'code' | 'comment' | 'citation' | 'dataview';
+	id: string;
+	column: 'left' | 'right';
 }
 
 export interface ColumnContainers {

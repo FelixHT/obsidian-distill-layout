@@ -13,16 +13,28 @@
 	--distill-sidenote-text: rgba(0, 0, 0, 0.54);
 	--distill-sidenote-border: transparent;
 	--distill-gutter-width: 20px;
+	--distill-toc-color: var(--text-muted, #888888);
+	--distill-toc-highlight: var(--text-accent, #7f6df2);
+	--distill-sidenote-number-color: var(--text-accent, #7f6df2);
+	--distill-progress-bar-color: var(--text-accent, #7f6df2);
+	--distill-comment-color: rgba(255, 193, 7, 0.12);
+	--distill-figure-max-height: 200px;
 }
 
 .theme-dark {
 	--distill-sidenote-text: rgba(255, 255, 255, 0.6);
+	--distill-comment-color: rgba(255, 193, 7, 0.08);
 }
 
 /* =============================================
    Overflow Chain - CRITICAL for margin content
    Only active when the plugin is loaded (body class scoped)
    ============================================= */
+
+/* Hide original figure embeds that have been parsed into margin figures */
+body.distill-layout-active [data-distill-figure-parsed] {
+	display: none !important;
+}
 
 /* Intermediates: BOTH axes visible (prevents CSS overflow coercion) */
 body.distill-layout-active .workspace-leaf-content[data-type="markdown"] .view-content,
@@ -33,7 +45,7 @@ body.distill-layout-active .workspace-leaf-content[data-type="markdown"] .markdo
 	overflow: visible !important;
 }
 
-/* The leaf-content itself: scrolls vertically (don't set overflow-x separately — coercion makes it pointless) */
+/* The leaf-content itself: scrolls vertically */
 body.distill-layout-active .workspace-leaf-content[data-type="markdown"] {
 	overflow-y: auto !important;
 }
@@ -80,7 +92,6 @@ body.distill-layout-active .markdown-preview-view pre {
 .distill-right-column {
 	position: absolute;
 	top: 0;
-	height: 100%;
 	overflow: visible;
 	pointer-events: none;
 }
@@ -134,7 +145,7 @@ body.distill-layout-active .markdown-preview-view pre {
 	display: block;
 	padding: 3px 0 3px 10px;
 	font-size: var(--distill-toc-font-size);
-	color: var(--text-muted);
+	color: var(--distill-toc-color);
 	text-decoration: none;
 	line-height: 1.4;
 	transition: color 0.15s ease;
@@ -167,12 +178,71 @@ body.distill-layout-active .markdown-preview-view pre {
 
 /* Active heading highlight */
 .distill-toc-active {
-	border-left-color: var(--text-accent);
+	border-left-color: var(--distill-toc-highlight);
 }
 
 .distill-toc-active .distill-toc-link {
-	color: var(--text-accent);
+	color: var(--distill-toc-highlight);
 	font-weight: 500;
+}
+
+/* =============================================
+   Reading Progress Bar
+   ============================================= */
+
+.distill-progress-bar {
+	width: 100%;
+	height: 3px;
+	background: var(--background-modifier-border, rgba(0, 0, 0, 0.1));
+	border-radius: 2px;
+	margin-bottom: 8px;
+	overflow: hidden;
+}
+
+.distill-progress-fill {
+	height: 100%;
+	width: 0%;
+	background: var(--distill-progress-bar-color);
+	border-radius: 2px;
+	transition: width 0.1s ease-out;
+}
+
+/* =============================================
+   Reading Time
+   ============================================= */
+
+.distill-reading-time {
+	font-size: calc(var(--distill-toc-font-size) * 0.85);
+	color: var(--text-muted);
+	margin-bottom: 10px;
+	padding-left: 10px;
+	line-height: 1.4;
+	opacity: 0.8;
+}
+
+/* =============================================
+   TOC Section Preview Tooltip
+   ============================================= */
+
+.distill-toc-tooltip {
+	position: fixed;
+	z-index: 1000;
+	max-width: 280px;
+	padding: 8px 12px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--text-muted);
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.15s ease;
+}
+
+.distill-toc-tooltip-visible {
+	opacity: 1;
 }
 
 /* =============================================
@@ -194,7 +264,7 @@ body.distill-layout-active .markdown-preview-view pre {
 .distill-sidenote-number {
 	font-size: 0.8em;
 	font-weight: 600;
-	color: var(--text-accent);
+	color: var(--distill-sidenote-number-color);
 	vertical-align: super;
 	line-height: 0;
 	margin-right: 2px;
@@ -241,11 +311,11 @@ body.distill-layout-active .markdown-preview-view pre {
 	justify-content: center;
 	width: 1.4em;
 	height: 1.4em;
-	border: 1.5px solid var(--text-accent);
+	border: 1.5px solid var(--distill-sidenote-number-color);
 	border-radius: 50%;
 	font-size: 0.7em;
 	font-weight: 600;
-	color: var(--text-accent);
+	color: var(--distill-sidenote-number-color);
 	vertical-align: middle;
 	line-height: 1;
 }
@@ -254,7 +324,7 @@ body.distill-layout-active .markdown-preview-view pre {
 	display: inline-block;
 	padding: 0.1em 0.45em;
 	border-radius: 9999px;
-	background: var(--text-accent);
+	background: var(--distill-sidenote-number-color);
 	color: var(--background-primary);
 	font-size: 0.7em;
 	font-weight: 600;
@@ -269,7 +339,7 @@ body.distill-layout-active .markdown-preview-view pre {
 	justify-content: center;
 	width: 1.4em;
 	height: 1.4em;
-	border: 1.5px solid var(--text-accent);
+	border: 1.5px solid var(--distill-sidenote-number-color);
 	border-radius: 50%;
 	font-size: 0.7em;
 	vertical-align: middle;
@@ -280,7 +350,7 @@ body.distill-layout-active .markdown-preview-view pre {
 .distill-inline-label.distill-badge-pill {
 	padding: 0.1em 0.45em;
 	border-radius: 9999px;
-	background: var(--text-accent);
+	background: var(--distill-sidenote-number-color);
 	color: var(--background-primary);
 	font-size: 0.7em;
 	vertical-align: middle;
@@ -298,16 +368,70 @@ body.distill-layout-active .markdown-preview-view pre {
 	background-color: var(--text-highlight-bg) !important;
 }
 
+/* =============================================
+   Annotation Highlighting (Feature 4)
+   ============================================= */
+
+.distill-annotation-highlight {
+	background-color: var(--text-highlight-bg, rgba(255, 208, 0, 0.4)) !important;
+	border-radius: 3px;
+	transition: background-color 0.2s ease;
+	outline: 2px solid var(--text-highlight-bg, rgba(255, 208, 0, 0.4));
+	outline-offset: 2px;
+}
+
+/* =============================================
+   Sidenote Icons (Feature 16)
+   ============================================= */
+
+.distill-sidenote-icon {
+	display: inline-block;
+	margin-right: 4px;
+	font-size: 0.9em;
+	vertical-align: baseline;
+}
+
+.distill-sidenote-icon::before {
+	font-style: normal;
+}
+
+.distill-sidenote-icon-info::before { content: '\2139'; color: #3b82f6; }        /* ℹ */
+.distill-sidenote-icon-warning::before { content: '\26A0'; color: #f59e0b; }     /* ⚠ */
+.distill-sidenote-icon-tip::before { content: '\2728'; color: #10b981; }          /* ✨ — using sparkles as tip */
+.distill-sidenote-icon-citation::before { content: '\201C'; color: #8b5cf6; }    /* " */
+.distill-sidenote-icon-question::before { content: '\2753'; color: #6366f1; }    /* ❓ */
+.distill-sidenote-icon-note::before { content: '\270E'; color: #64748b; }         /* ✎ */
+.distill-sidenote-icon-example::before { content: '\25B6'; color: #06b6d4; }     /* ▶ */
+
+/* =============================================
+   Backlink Indicator (Feature 3)
+   ============================================= */
+
+.distill-backlink-indicator {
+	display: inline-block;
+	margin-left: 2px;
+	font-size: 0.7em;
+	color: var(--text-accent);
+	vertical-align: super;
+	opacity: 0.7;
+	cursor: help;
+}
+
 /* 2a: Collapsible sidenotes */
 .distill-sidenote-collapsed {
-	overflow: hidden;
 	position: absolute; /* keep absolute positioning */
 }
 
-.distill-sidenote-collapsed::after {
+/* Inner wrapper gets the overflow clipping so the expand button stays visible */
+.distill-sidenote-collapsed .distill-sidenote-inner {
+	overflow: hidden;
+	position: relative;
+}
+
+.distill-sidenote-collapsed .distill-sidenote-inner::after {
 	content: '';
 	position: absolute;
-	bottom: 18px;
+	bottom: 0;
 	left: 0;
 	right: 0;
 	height: 30px;
@@ -322,7 +446,7 @@ body.distill-layout-active .markdown-preview-view pre {
 	margin-top: 2px;
 	border: none;
 	background: none;
-	color: var(--text-accent);
+	color: var(--distill-sidenote-number-color);
 	font-size: 0.75em;
 	cursor: pointer;
 	text-align: left;
@@ -347,12 +471,40 @@ body.distill-layout-active .markdown-preview-view pre {
 	transition: opacity 0.15s ease;
 }
 
-/* Hide original footnote ref text — replaced by plugin numbering.
-   font-size:0 keeps the element in flow for positioning. */
-[data-distill-sidenote-rendered="true"]:not(.distill-sidenote-marker) {
-	font-size: 0 !important;
-	line-height: 0 !important;
-	overflow: hidden;
+/* Styled in-text footnote ref numbers (replaces original ref text) */
+[data-distill-sidenote-rendered="true"]:not(.distill-sidenote-marker) .distill-ref-number {
+	color: var(--distill-sidenote-number-color);
+	text-decoration: none;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+/* Badge variants on in-text ref numbers */
+[data-distill-sidenote-rendered="true"] .distill-ref-number.distill-badge-circled {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.4em;
+	height: 1.4em;
+	border: 1.5px solid var(--distill-sidenote-number-color);
+	border-radius: 50%;
+	font-size: 0.7em;
+	font-weight: 600;
+	color: var(--distill-sidenote-number-color);
+	vertical-align: middle;
+	line-height: 1;
+}
+
+[data-distill-sidenote-rendered="true"] .distill-ref-number.distill-badge-pill {
+	display: inline-block;
+	padding: 0.1em 0.45em;
+	border-radius: 9999px;
+	background: var(--distill-sidenote-number-color);
+	color: var(--background-primary);
+	font-size: 0.7em;
+	font-weight: 600;
+	vertical-align: middle;
+	line-height: 1.2;
 }
 
 /* Sidenote marker for custom {>text} syntax */
@@ -363,10 +515,242 @@ body.distill-layout-active .markdown-preview-view pre {
 
 .distill-sidenote-marker::after {
 	content: '\203B';
-	color: var(--text-accent);
+	color: var(--distill-sidenote-number-color);
 	font-size: 80%;
 	vertical-align: super;
 	margin-left: 1px;
+}
+
+/* =============================================
+   Sidenote Entrance Animations (Feature 17)
+   ============================================= */
+
+.distill-sidenote-animate {
+	opacity: 0;
+	transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.distill-sidenote-animate.distill-sidenote-animate-slide {
+	transform: translateX(20px);
+}
+
+.distill-sidenote-enter {
+	opacity: 1 !important;
+	transform: none !important;
+}
+
+/* =============================================
+   Margin Figures (Feature 1)
+   ============================================= */
+
+.distill-margin-figure {
+	position: absolute;
+	width: var(--distill-sidenote-width);
+	margin: 0;
+	padding: 0;
+}
+
+.distill-margin-figure img {
+	max-width: 100%;
+	max-height: var(--distill-figure-max-height);
+	height: auto;
+	display: block;
+	border-radius: 3px;
+}
+
+.distill-margin-figure figcaption {
+	font-size: calc(var(--distill-sidenote-font-size) * 0.9);
+	color: var(--text-muted);
+	margin-top: 4px;
+	line-height: 1.3;
+	font-style: italic;
+}
+
+/* Figure marker in text */
+.distill-figure-marker {
+	display: inline;
+}
+
+.distill-figure-marker::after {
+	content: '\1F5BC'; /* 🖼 — image icon */
+	font-size: 80%;
+	vertical-align: super;
+	margin-left: 1px;
+	opacity: 0.6;
+}
+
+/* Inline figure fallback for narrow mode */
+.distill-inline-figure {
+	display: none;
+}
+
+.distill-narrow .distill-inline-figure {
+	display: block;
+	margin: 0.5em 0;
+}
+
+.distill-inline-figure img {
+	max-width: 100%;
+	height: auto;
+	border-radius: 3px;
+}
+
+.distill-inline-figure-caption {
+	display: block;
+	font-size: var(--distill-sidenote-font-size);
+	color: var(--text-muted);
+	font-style: italic;
+	margin-top: 4px;
+}
+
+/* =============================================
+   Margin Code (Feature 2)
+   ============================================= */
+
+.distill-margin-code {
+	position: absolute;
+	width: var(--distill-sidenote-width);
+	font-size: calc(var(--distill-sidenote-font-size) * 0.85);
+	border-radius: 4px;
+	overflow: auto;
+}
+
+.distill-margin-code pre {
+	margin: 0;
+	padding: 8px;
+	font-size: inherit;
+	background: var(--code-background, var(--background-secondary));
+	border-radius: 4px;
+}
+
+.distill-margin-code code {
+	font-size: inherit;
+}
+
+/* =============================================
+   Margin Comments (Feature 12)
+   ============================================= */
+
+.distill-margin-comment {
+	position: absolute;
+	width: var(--distill-sidenote-width);
+	font-size: var(--distill-sidenote-font-size);
+	line-height: 1.4;
+	padding: 6px 8px;
+	background: var(--distill-comment-color);
+	border-left: 3px solid rgba(255, 193, 7, 0.5);
+	border-radius: 0 4px 4px 0;
+	box-sizing: border-box;
+}
+
+.distill-comment-icon {
+	margin-right: 4px;
+	font-size: 0.9em;
+}
+
+.distill-comment-author {
+	font-weight: 600;
+	font-size: 0.85em;
+	color: var(--text-normal);
+	display: block;
+	margin-bottom: 2px;
+}
+
+.distill-comment-content {
+	color: var(--text-muted);
+}
+
+/* Comment marker in text */
+.distill-comment-marker {
+	display: inline;
+}
+
+.distill-comment-marker::after {
+	content: '\2709'; /* ✉ */
+	color: rgba(255, 193, 7, 0.7);
+	font-size: 80%;
+	vertical-align: super;
+	margin-left: 1px;
+}
+
+/* Inline comment fallback for narrow mode */
+.distill-inline-comment {
+	display: none;
+}
+
+.distill-narrow .distill-inline-comment {
+	display: block;
+	font-size: var(--distill-sidenote-font-size);
+	color: var(--text-muted);
+	padding: 4px 8px;
+	margin: 0.3em 0;
+	background: var(--distill-comment-color);
+	border-left: 3px solid rgba(255, 193, 7, 0.5);
+	border-radius: 0 4px 4px 0;
+}
+
+/* =============================================
+   Margin Citations (Feature 19)
+   ============================================= */
+
+.distill-margin-citation {
+	position: absolute;
+	width: var(--distill-sidenote-width);
+	font-size: calc(var(--distill-sidenote-font-size) * 0.9);
+	line-height: 1.4;
+	color: var(--text-muted);
+	padding: 4px 0;
+}
+
+.distill-margin-citation em {
+	font-style: italic;
+}
+
+.distill-citation-unresolved {
+	opacity: 0.6;
+	font-style: italic;
+}
+
+/* Citation marker in text */
+.distill-citation-marker {
+	color: var(--distill-sidenote-number-color);
+	cursor: default;
+}
+
+/* =============================================
+   Margin Dataview (Feature 18)
+   ============================================= */
+
+.distill-margin-dataview {
+	position: absolute;
+	width: var(--distill-sidenote-width);
+	font-size: 80%;
+	overflow: auto;
+	max-height: 300px;
+}
+
+/* Compact table styles for Dataview in margin */
+.distill-margin-dataview table {
+	font-size: inherit;
+	border-collapse: collapse;
+	width: 100%;
+}
+
+.distill-margin-dataview th,
+.distill-margin-dataview td {
+	padding: 2px 4px;
+	border: 1px solid var(--background-modifier-border);
+}
+
+.distill-margin-dataview th {
+	font-weight: 600;
+	background: var(--background-secondary);
+}
+
+.distill-margin-dataview ul,
+.distill-margin-dataview ol {
+	padding-left: 1.2em;
+	margin: 0.2em 0;
 }
 
 /* =============================================
@@ -384,7 +768,7 @@ body.distill-layout-active .markdown-preview-view pre {
 
 .distill-inline-label {
 	cursor: pointer;
-	color: var(--text-accent);
+	color: var(--distill-sidenote-number-color);
 	font-size: 0.75em;
 	vertical-align: super;
 	font-weight: 600;
@@ -410,7 +794,7 @@ body.distill-layout-active .markdown-preview-view pre {
 }
 
 .distill-inline-toggle:checked + .distill-inline-label {
-	background-color: var(--text-accent);
+	background-color: var(--distill-sidenote-number-color);
 	color: var(--background-primary);
 }
 
@@ -516,6 +900,15 @@ body.distill-layout-alternating.distill-layout-active .markdown-source-view.dist
 	display: none !important;
 }
 
+/* Hide margin items in narrow mode */
+.distill-narrow .distill-margin-figure,
+.distill-narrow .distill-margin-code,
+.distill-narrow .distill-margin-comment,
+.distill-narrow .distill-margin-citation,
+.distill-narrow .distill-margin-dataview {
+	display: none !important;
+}
+
 /* Show inline sidenotes in narrow mode */
 .distill-narrow .distill-inline-sidenote {
 	display: inline;
@@ -524,6 +917,32 @@ body.distill-layout-alternating.distill-layout-active .markdown-source-view.dist
 /* Margin notes always visible in narrow mode (no toggle) */
 .distill-narrow .distill-inline-marginnote {
 	display: inline;
+}
+
+/* =============================================
+   Settings Tab — Collapsible Sections
+   ============================================= */
+
+.distill-settings-section {
+	margin-bottom: 8px;
+}
+
+.distill-settings-section-title {
+	font-size: 1.1em;
+	font-weight: 600;
+	cursor: pointer;
+	padding: 8px 0;
+	user-select: none;
+	color: var(--text-normal);
+}
+
+.distill-settings-section-title:hover {
+	color: var(--text-accent);
+}
+
+.distill-settings-section[open] > .distill-settings-section-title {
+	border-bottom: 1px solid var(--background-modifier-border);
+	margin-bottom: 8px;
 }
 
 /* =============================================
@@ -558,6 +977,25 @@ body.distill-layout-alternating.distill-layout-active .markdown-source-view.dist
 	}
 
 	body.distill-layout-active .markdown-preview-view section.footnotes {
+		display: block !important;
+	}
+
+	/* Hide all margin items in print */
+	.distill-margin-figure,
+	.distill-margin-code,
+	.distill-margin-comment,
+	.distill-margin-citation,
+	.distill-margin-dataview {
+		display: none !important;
+	}
+
+	/* Show inline figures in print */
+	.distill-inline-figure {
+		display: block !important;
+	}
+
+	/* Show inline comments in print */
+	.distill-inline-comment {
 		display: block !important;
 	}
 }

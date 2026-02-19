@@ -1,5 +1,5 @@
-import type { ParsedFootnote, DistillLayoutSettings } from '../types';
-import { resolveCollisions } from './collision-resolver';
+import type { ParsedFootnote, DistillLayoutSettings, MarginItem } from '../types';
+import type { MarginItemRegistry } from '../margin/margin-item-registry';
 
 /**
  * Creates sidenote elements in the right column, positioned to align
@@ -8,6 +8,7 @@ import { resolveCollisions } from './collision-resolver';
  */
 export class SidenoteRenderer {
 	private settings: DistillLayoutSettings;
+	private registry: MarginItemRegistry | null;
 	private sidenotes: HTMLElement[] = [];
 	/** For alternating mode: track which side each sidenote is on. */
 	private leftSidenotes: HTMLElement[] = [];
@@ -21,9 +22,12 @@ export class SidenoteRenderer {
 	private hoverTimers: Array<ReturnType<typeof setTimeout>> = [];
 	/** Running index for alternating mode — persists across incremental render() calls. */
 	private alternatingIndex = 0;
+	/** Currently highlighted element for annotation highlighting. */
+	private highlightedAnnotation: HTMLElement | null = null;
 
-	constructor(settings: DistillLayoutSettings) {
+	constructor(settings: DistillLayoutSettings, registry?: MarginItemRegistry) {
 		this.settings = settings;
+		this.registry = registry ?? null;
 	}
 
 	updateSettings(settings: DistillLayoutSettings): void {
@@ -52,6 +56,25 @@ export class SidenoteRenderer {
 			if (fn.refElement.dataset.distillSidenoteRendered) continue;
 			fn.refElement.dataset.distillSidenoteRendered = 'true';
 
+			// Bug 2 fix: prevent the original <a> from triggering
+			// Obsidian's native scroll-to-anchor (which fires layout-change
+			// and tears down sidenotes). We use a handler instead of removing
+			// href so that CSS attribute selectors still match on re-parse.
+			const refAnchor = fn.refElement.tagName === 'A'
+				? fn.refElement as HTMLAnchorElement
+				: fn.refElement.querySelector('a') as HTMLAnchorElement | null;
+			if (refAnchor) {
+				const preventNav = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
+				refAnchor.addEventListener('click', preventNav, true); // capture phase
+				this.eventCleanup.push(() => refAnchor.removeEventListener('click', preventNav, true));
+
+				if (this.settings.suppressFootnoteHover) {
+					const suppressHover = (e: Event) => { e.stopPropagation(); };
+					refAnchor.addEventListener('mouseover', suppressHover, true);
+					this.eventCleanup.push(() => refAnchor.removeEventListener('mouseover', suppressHover, true));
+				}
+			}
+
 			const isNumbered = fn.type !== 'marginnote' && this.settings.showSidenoteNumbers;
 
 			// --- Margin sidenote (absolute-positioned in right column) ---
@@ -72,6 +95,13 @@ export class SidenoteRenderer {
 				}
 				numberSpan.textContent = `${num}`;
 				note.appendChild(numberSpan);
+			}
+
+			// Sidenote icon (Feature 16)
+			if (fn.icon && this.settings.sidenoteIconsEnabled) {
+				const iconSpan = document.createElement('span');
+				iconSpan.className = `distill-sidenote-icon distill-sidenote-icon-${fn.icon}`;
+				note.appendChild(iconSpan);
 			}
 
 			const contentSpan = document.createElement('span');
@@ -110,6 +140,9 @@ export class SidenoteRenderer {
 			note.style.top = refTop;
 			note.dataset.refTop = refTop;
 
+			// Determine which column this goes into
+			let column: 'left' | 'right' = 'right';
+
 			// 3c: In alternating mode, odd notes go left, even go right
 			if (isAlternating) {
 				const isOdd = this.alternatingIndex % 2 === 0; // 0-indexed: first note is "odd" (left)
@@ -117,8 +150,10 @@ export class SidenoteRenderer {
 				targetContainer.appendChild(note);
 				if (isOdd) {
 					this.leftSidenotes.push(note);
+					column = 'left';
 				} else {
 					this.rightSidenotes.push(note);
+					column = 'right';
 				}
 				this.alternatingIndex++;
 			} else {
@@ -126,6 +161,18 @@ export class SidenoteRenderer {
 			}
 			this.sidenotes.push(note);
 			this.refMap.set(note, fn.refElement);
+
+			// Register with margin item registry for unified collision resolution
+			if (this.registry) {
+				const itemType = fn.type === 'marginnote' ? 'marginnote' : 'sidenote';
+				this.registry.register({
+					element: note,
+					refElement: fn.refElement,
+					type: itemType,
+					id: fn.id,
+					column,
+				});
+			}
 
 			// Mark the ref with a matching sidenote ID for cross-referencing
 			fn.refElement.dataset.sidenoteId = fn.id;
@@ -145,6 +192,11 @@ export class SidenoteRenderer {
 				this.addHoverHighlightHandlers(note, fn.refElement);
 			}
 
+			// Feature 4: Annotation highlighting on click
+			if (this.settings.annotationHighlight) {
+				this.addAnnotationHighlightHandler(note, fn.refElement);
+			}
+
 			// --- Inline fallback for narrow mode ---
 			const inline = this.createInlineFallback(fn, num, isNumbered);
 			fn.refElement.after(inline);
@@ -156,16 +208,18 @@ export class SidenoteRenderer {
 		// incrementally, shifting layout between calls).
 		this.recalcAllPositions(sizerEl);
 
-		// Sort by document order then resolve collisions
-		this.sortByDocumentOrder();
-		if (isAlternating) {
-			// Resolve collisions independently per side
-			this.sortSubArrayByDocOrder(this.leftSidenotes);
-			this.sortSubArrayByDocOrder(this.rightSidenotes);
-			resolveCollisions(this.leftSidenotes);
-			resolveCollisions(this.rightSidenotes);
-		} else {
-			resolveCollisions(this.sidenotes);
+		// Collision resolution: if registry exists, it handles this in main.ts.
+		// Otherwise, fall back to local resolution.
+		if (!this.registry) {
+			this.sortByDocumentOrder();
+			if (isAlternating) {
+				this.sortSubArrayByDocOrder(this.leftSidenotes);
+				this.sortSubArrayByDocOrder(this.rightSidenotes);
+				this.resolveCollisionsLocal(this.leftSidenotes);
+				this.resolveCollisionsLocal(this.rightSidenotes);
+			} else {
+				this.resolveCollisionsLocal(this.sidenotes);
+			}
 		}
 
 		// 2a: Apply collapsible behavior to long sidenotes
@@ -196,14 +250,17 @@ export class SidenoteRenderer {
 	 */
 	reposition(sizerEl: HTMLElement): void {
 		this.recalcAllPositions(sizerEl);
-		this.sortByDocumentOrder();
-		if (this.settings.columnLayout === 'alternating') {
-			this.sortSubArrayByDocOrder(this.leftSidenotes);
-			this.sortSubArrayByDocOrder(this.rightSidenotes);
-			resolveCollisions(this.leftSidenotes);
-			resolveCollisions(this.rightSidenotes);
-		} else {
-			resolveCollisions(this.sidenotes);
+		// If registry exists, main.ts calls registry.repositionAll() instead
+		if (!this.registry) {
+			this.sortByDocumentOrder();
+			if (this.settings.columnLayout === 'alternating') {
+				this.sortSubArrayByDocOrder(this.leftSidenotes);
+				this.sortSubArrayByDocOrder(this.rightSidenotes);
+				this.resolveCollisionsLocal(this.leftSidenotes);
+				this.resolveCollisionsLocal(this.rightSidenotes);
+			} else {
+				this.resolveCollisionsLocal(this.sidenotes);
+			}
 		}
 	}
 
@@ -261,6 +318,25 @@ export class SidenoteRenderer {
 		});
 	}
 
+	/** Local collision resolution fallback (used when registry is not available). */
+	private resolveCollisionsLocal(notes: HTMLElement[], gap = 8): void {
+		if (notes.length < 2) return;
+		for (const note of notes) {
+			if (note.dataset.refTop) {
+				note.style.top = note.dataset.refTop;
+			}
+		}
+		for (let i = 1; i < notes.length; i++) {
+			const prev = notes[i - 1]!;
+			const curr = notes[i]!;
+			const prevBottom = parseFloat(prev.style.top) + prev.getBoundingClientRect().height;
+			const currTop = parseFloat(curr.style.top);
+			if (currTop < prevBottom + gap) {
+				curr.style.top = `${prevBottom + gap}px`;
+			}
+		}
+	}
+
 	private buildPositionMap(sizerEl: HTMLElement): Map<Element, number> {
 		const selectors = [
 			'sup.footnote-ref a',
@@ -296,8 +372,24 @@ export class SidenoteRenderer {
 	}
 
 	private stylizeRef(refEl: HTMLElement, num: number): void {
-		// Add a data attribute for the sidenote number
 		refEl.dataset.distillSidenoteNum = `${num}`;
+
+		// Replace the <a> text with the plugin's number so the ref
+		// stays visible (Bug 4 fix). Store original text for cleanup.
+		const anchor = refEl.tagName === 'A'
+			? refEl as HTMLAnchorElement
+			: refEl.querySelector('a') as HTMLAnchorElement | null;
+		if (anchor) {
+			anchor.dataset.distillOriginalText = anchor.textContent ?? '';
+			anchor.textContent = `${num}`;
+			anchor.classList.add('distill-ref-number');
+
+			// Apply badge style class to match sidenote number
+			const badgeStyle = this.settings.numberBadgeStyle;
+			if (badgeStyle !== 'superscript') {
+				anchor.classList.add(`distill-badge-${badgeStyle}`);
+			}
+		}
 	}
 
 	/** 1c: Add click-to-scroll between sidenote and its reference. */
@@ -323,6 +415,36 @@ export class SidenoteRenderer {
 		this.eventCleanup.push(() => refEl.removeEventListener('click', refHandler));
 	}
 
+	/** Feature 4: Click sidenote → highlight its source paragraph. */
+	private addAnnotationHighlightHandler(noteEl: HTMLElement, refEl: HTMLElement): void {
+		const handler = (e: Event) => {
+			// Don't interfere with number click (cross-ref)
+			if ((e.target as HTMLElement).classList.contains('distill-sidenote-number')) return;
+			if ((e.target as HTMLElement).classList.contains('distill-sidenote-expand')) return;
+
+			const block = refEl.closest('p, li, blockquote, .markdown-preview-section > *') as HTMLElement;
+			if (!block) return;
+
+			// Toggle off if clicking same annotation
+			if (this.highlightedAnnotation === block) {
+				block.classList.remove('distill-annotation-highlight');
+				this.highlightedAnnotation = null;
+				return;
+			}
+
+			// Remove previous highlight
+			if (this.highlightedAnnotation) {
+				this.highlightedAnnotation.classList.remove('distill-annotation-highlight');
+			}
+
+			block.classList.add('distill-annotation-highlight');
+			this.highlightedAnnotation = block;
+		};
+
+		noteEl.addEventListener('click', handler);
+		// No cleanup needed — noteEl is removed with sidenote
+	}
+
 	/** 2a: Collapse sidenotes taller than the threshold. */
 	private applyCollapsible(): void {
 		const threshold = this.settings.sidenoteCollapseHeight;
@@ -331,8 +453,17 @@ export class SidenoteRenderer {
 			if (note.querySelector('.distill-sidenote-expand')) continue;
 			if (note.scrollHeight <= threshold) continue;
 
+			// Wrap existing children in an inner div so maxHeight clips
+			// the content but the expand button stays visible outside it.
+			const inner = document.createElement('div');
+			inner.className = 'distill-sidenote-inner';
+			while (note.firstChild) {
+				inner.appendChild(note.firstChild);
+			}
+			note.appendChild(inner);
+
 			note.classList.add('distill-sidenote-collapsed');
-			note.style.maxHeight = `${threshold}px`;
+			inner.style.maxHeight = `${threshold}px`;
 
 			const btn = document.createElement('button');
 			btn.className = 'distill-sidenote-expand';
@@ -341,21 +472,23 @@ export class SidenoteRenderer {
 				const isCollapsed = note.classList.contains('distill-sidenote-collapsed');
 				note.classList.toggle('distill-sidenote-collapsed', !isCollapsed);
 				if (isCollapsed) {
-					note.style.maxHeight = '';
+					inner.style.maxHeight = '';
 					btn.textContent = 'Show less';
 				} else {
-					note.style.maxHeight = `${threshold}px`;
+					inner.style.maxHeight = `${threshold}px`;
 					btn.textContent = 'Show more';
 				}
-				// Re-resolve collisions — in alternating mode, resolve per-side
-				if (this.settings.columnLayout === 'alternating') {
+				// Re-resolve collisions via registry or local
+				if (this.registry) {
+					this.registry.resolveAll();
+				} else if (this.settings.columnLayout === 'alternating') {
 					if (this.leftSidenotes.includes(note)) {
-						resolveCollisions(this.leftSidenotes);
+						this.resolveCollisionsLocal(this.leftSidenotes);
 					} else {
-						resolveCollisions(this.rightSidenotes);
+						this.resolveCollisionsLocal(this.rightSidenotes);
 					}
 				} else {
-					resolveCollisions(this.sidenotes);
+					this.resolveCollisionsLocal(this.sidenotes);
 				}
 			});
 			note.appendChild(btn);
@@ -497,6 +630,12 @@ export class SidenoteRenderer {
 		for (const timer of this.hoverTimers) clearTimeout(timer);
 		this.hoverTimers = [];
 
+		// Clear annotation highlight
+		if (this.highlightedAnnotation) {
+			this.highlightedAnnotation.classList.remove('distill-annotation-highlight');
+			this.highlightedAnnotation = null;
+		}
+
 		for (const note of this.sidenotes) note.remove();
 		for (const inline of this.inlineNotes) inline.remove();
 		this.sidenotes = [];
@@ -511,6 +650,12 @@ export class SidenoteRenderer {
 			this.repositionLoadTimer = null;
 		}
 
+		// Unregister sidenotes from registry
+		if (this.registry) {
+			this.registry.unregisterByType('sidenote');
+			this.registry.unregisterByType('marginnote');
+		}
+
 		// Restore hidden footnotes sections
 		for (const section of this.hiddenFootnoteSections) {
 			if (section.isConnected) {
@@ -519,8 +664,21 @@ export class SidenoteRenderer {
 		}
 		this.hiddenFootnoteSections = [];
 
-		// Clean up data attributes
+		// Clean up data attributes and restore original ref state
 		document.querySelectorAll('[data-distill-sidenote-rendered]').forEach(el => {
+			// Restore original <a> text content (Bug 4 cleanup)
+			const anchor = el.tagName === 'A'
+				? el as HTMLAnchorElement
+				: el.querySelector('a') as HTMLAnchorElement | null;
+			if (anchor) {
+				const origText = anchor.dataset.distillOriginalText;
+				if (origText !== undefined) {
+					anchor.textContent = origText;
+					delete anchor.dataset.distillOriginalText;
+				}
+				anchor.classList.remove('distill-ref-number', 'distill-badge-circled', 'distill-badge-pill');
+			}
+
 			el.removeAttribute('data-distill-sidenote-rendered');
 			el.removeAttribute('data-distill-sidenote-num');
 			el.removeAttribute('data-sidenote-id');

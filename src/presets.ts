@@ -13,6 +13,10 @@ export const PRESETS: Record<string, Partial<DistillLayoutSettings>> = {
 		sidenoteWidth: 260,
 		sidenoteFontSize: 85,
 		tocFontSize: 75,
+		sidenoteAnimations: false,
+		sidenoteAnimationStyle: 'fade',
+		sidenoteIconsEnabled: true,
+		marginFiguresEnabled: true,
 	},
 	academic: {
 		sidenoteFontFamily: '"Times New Roman", Times, serif',
@@ -22,6 +26,10 @@ export const PRESETS: Record<string, Partial<DistillLayoutSettings>> = {
 		sidenoteWidth: 220,
 		sidenoteFontSize: 80,
 		tocFontSize: 80,
+		sidenoteAnimations: false,
+		sidenoteIconsEnabled: true,
+		citationsEnabled: false,
+		marginFiguresEnabled: true,
 	},
 	minimal: {
 		sidenoteFontFamily: '',
@@ -32,6 +40,11 @@ export const PRESETS: Record<string, Partial<DistillLayoutSettings>> = {
 		sidenoteWidth: 200,
 		sidenoteFontSize: 80,
 		tocFontSize: 75,
+		sidenoteAnimations: true,
+		sidenoteAnimationStyle: 'fade',
+		sidenoteIconsEnabled: false,
+		progressBarEnabled: false,
+		readingTimeEnabled: false,
 	},
 	'dark-accent': {
 		sidenoteFontFamily: '',
@@ -41,6 +54,10 @@ export const PRESETS: Record<string, Partial<DistillLayoutSettings>> = {
 		sidenoteWidth: 230,
 		sidenoteFontSize: 85,
 		tocFontSize: 80,
+		sidenoteAnimations: true,
+		sidenoteAnimationStyle: 'slide',
+		sidenoteIconsEnabled: true,
+		progressBarEnabled: true,
 	},
 };
 

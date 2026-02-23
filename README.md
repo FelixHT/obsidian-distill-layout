@@ -2,8 +2,7 @@
 
 Display notes in a [Distill.pub](https://distill.pub)-inspired reading layout with a scroll-tracking table of contents and margin sidenotes.
 
-<!-- TODO: Add screenshot or GIF here before marketplace submission -->
-<!-- ![Distill Layout screenshot](screenshot.png) -->
+<img width="1489" height="720" alt="image" src="https://github.com/user-attachments/assets/48270850-425b-4f57-b531-775c89d56816" />
 
 ## Features
 

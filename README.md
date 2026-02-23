@@ -45,7 +45,7 @@ Experimental support for TOC and sidenotes in source and live preview modes.
 
 ### Manual Installation
 1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/FelixHT/obsidian-distill-layout/releases/latest)
-2. Create a folder `obsidian-distill-layout` in your vault's `.obsidian/plugins/` directory
+2. Create a folder `distill-layout` in your vault's `.obsidian/plugins/` directory
 3. Copy the downloaded files into that folder
 4. Restart Obsidian and enable the plugin in **Settings** > **Community plugins**
 

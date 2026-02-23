@@ -15,6 +15,8 @@ export interface EditParsedFootnote {
 	/** Footnote definition text */
 	content: string;
 	type: 'sidenote' | 'marginnote';
+	/** Icon name for icon sidenotes (e.g. 'warning' from {>!warning: text}) */
+	icon?: string;
 }
 
 export function parseEditFootnotes(docText: string, customSyntax: boolean): EditParsedFootnote[] {
@@ -111,7 +113,7 @@ function parseReferences(docText: string): Array<{ id: string; line: number; off
  */
 function parseCustomSyntax(docText: string): EditParsedFootnote[] {
 	const results: EditParsedFootnote[] = [];
-	const regex = /\{>(?:!(\w+):\s*)?(?:([^:|]+)\|)?([^}]+)\}/g;
+	const regex = /\{>(?!fig:)(?:!(\w+):\s*)?(?:([^:|]+)\|)?([^}]+)\}/g;
 	let match;
 
 	while ((match = regex.exec(docText)) !== null) {
@@ -132,6 +134,7 @@ function parseCustomSyntax(docText: string): EditParsedFootnote[] {
 			refOffset: offset,
 			content,
 			type: 'marginnote',
+			icon: match[1] || undefined,
 		});
 	}
 

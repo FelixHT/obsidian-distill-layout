@@ -1,3 +1,4 @@
+import type { MarkdownView } from 'obsidian';
 import type { HeadingEntry, DistillLayoutSettings } from '../types';
 
 /**
@@ -21,11 +22,13 @@ export class TocRenderer {
 	 * Render the TOC into the given container element (left column).
 	 * @param onItemClick  Optional callback for custom scroll behavior (edit mode).
 	 *                     If provided, it's called instead of the default scrollIntoView.
+	 * @param view         Optional MarkdownView for reading-mode applyScroll on virtualized headings.
 	 */
 	render(
 		container: HTMLElement,
 		headings: HeadingEntry[],
-		onItemClick?: (heading: HeadingEntry) => void
+		onItemClick?: (heading: HeadingEntry) => void,
+		view?: MarkdownView
 	): void {
 		this.clear();
 
@@ -38,7 +41,7 @@ export class TocRenderer {
 		ul.className = 'distill-toc-list';
 
 		for (const heading of headings) {
-			const li = this.createTocItem(heading, onItemClick);
+			const li = this.createTocItem(heading, onItemClick, view);
 			ul.appendChild(li);
 		}
 
@@ -50,7 +53,8 @@ export class TocRenderer {
 	/** Create a single TOC list item with a link. */
 	private createTocItem(
 		heading: HeadingEntry,
-		onItemClick?: (heading: HeadingEntry) => void
+		onItemClick?: (heading: HeadingEntry) => void,
+		view?: MarkdownView
 	): HTMLElement {
 		const li = document.createElement('li');
 		li.className = `distill-toc-item distill-toc-h${heading.level}`;
@@ -65,6 +69,9 @@ export class TocRenderer {
 			e.preventDefault();
 			if (onItemClick) {
 				onItemClick(heading);
+			} else if (heading.line != null && view && !heading.element.matches('h1, h2, h3, h4, h5, h6')) {
+				// Virtualized heading — element is proxy (previewSizer), use applyScroll
+				(view.currentMode as any).applyScroll(heading.line);
 			} else {
 				heading.element.scrollIntoView({
 					behavior: this.settings.smoothScroll ? 'smooth' : 'auto',

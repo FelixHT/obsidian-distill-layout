@@ -1,6 +1,5 @@
 import type { DistillLayoutSettings } from '../types';
 import type { EditParsedFootnote } from './edit-footnote-parser';
-import { resolveCollisions } from './collision-resolver';
 
 /**
  * Renders sidenotes in the edit-mode scroll track, positioned via
@@ -24,31 +23,40 @@ export class EditSidenoteRenderer {
 
 	/**
 	 * Render sidenotes into the track div using CM6 line geometry.
-	 * @param track       The `.distill-edit-sidenote-track` element.
-	 * @param footnotes   Parsed footnote data from text.
-	 * @param cmView      The CM6 EditorView for geometry lookups.
+	 * @param track          The `.distill-edit-sidenote-track` element.
+	 * @param footnotes      Parsed footnote data from text.
+	 * @param cmView         The CM6 EditorView for geometry lookups.
+	 * @param contentOffset  Pixel offset from track origin to .cm-content origin.
 	 */
 	render(
 		track: HTMLElement,
 		footnotes: EditParsedFootnote[],
-		cmView: import('@codemirror/view').EditorView
+		cmView: import('@codemirror/view').EditorView,
+		contentOffset = 0
 	): void {
 		this.clear();
 
 		if (footnotes.length === 0) return;
 
+		const trackTop = track.getBoundingClientRect().top;
 		let sidenoteIndex = 0;
 
 		for (const fn of footnotes) {
 			const isNumbered = fn.type !== 'marginnote' && this.settings.showSidenoteNumbers;
 
-			// Get the pixel offset of the reference line
-			let top = 0;
-			try {
-				const block = cmView.lineBlockAt(fn.refOffset);
-				top = block.top;
-			} catch {
-				continue;
+			// Get the pixel offset of the reference line.
+			// Prefer coordsAtPos (DOM-accurate, accounts for rendered widgets)
+			// with lineBlockAt as fallback for off-screen positions.
+			let top: number | null = null;
+			const coords = cmView.coordsAtPos(fn.refOffset);
+			if (coords) {
+				top = coords.top - trackTop;
+			} else {
+				try {
+					top = cmView.lineBlockAt(fn.refOffset).top + contentOffset;
+				} catch {
+					continue;
+				}
 			}
 
 			const note = document.createElement('div');
@@ -79,6 +87,14 @@ export class EditSidenoteRenderer {
 				note.appendChild(numberSpan);
 			}
 
+			// Icon rendering for {>!icon: text} syntax
+			if (fn.icon) {
+				const iconSpan = document.createElement('span');
+				iconSpan.className = 'distill-sidenote-icon';
+				iconSpan.textContent = this.getIconEmoji(fn.icon);
+				note.appendChild(iconSpan);
+			}
+
 			const contentSpan = document.createElement('span');
 			contentSpan.className = 'distill-sidenote-content';
 			contentSpan.textContent = isNumbered ? ` ${fn.content}` : fn.content;
@@ -88,18 +104,31 @@ export class EditSidenoteRenderer {
 			note.style.position = 'absolute';
 			note.style.top = `${top}px`;
 			note.dataset.refTop = `${top}px`;
+			note.dataset.refOffset = String(fn.refOffset);
 
 			track.appendChild(note);
 			this.sidenotes.push(note);
 		}
 
-		// Resolve vertical collisions
-		resolveCollisions(this.sidenotes);
-
 		// Apply collapsible behavior
 		if (this.settings.collapsibleSidenotes) {
 			this.applyCollapsible();
 		}
+	}
+
+	getSidenotes(): HTMLElement[] {
+		return this.sidenotes;
+	}
+
+	private getIconEmoji(icon: string): string {
+		const map: Record<string, string> = {
+			warning: '\u26A0\uFE0F',
+			info: '\u2139\uFE0F',
+			tip: '\uD83D\uDCA1',
+			note: '\uD83D\uDCDD',
+			question: '\u2753',
+		};
+		return map[icon.toLowerCase()] || `[${icon}]`;
 	}
 
 	private applyCollapsible(): void {
@@ -123,7 +152,6 @@ export class EditSidenoteRenderer {
 					note.style.maxHeight = `${threshold}px`;
 					btn.textContent = 'Show more';
 				}
-				resolveCollisions(this.sidenotes);
 			});
 			note.appendChild(btn);
 		}

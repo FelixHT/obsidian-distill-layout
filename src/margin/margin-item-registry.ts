@@ -16,6 +16,19 @@ export class MarginItemRegistry {
 		this.items = this.items.filter(item => item.type !== type);
 	}
 
+	unregisterById(id: string): void {
+		this.items = this.items.filter(item => item.id !== id);
+	}
+
+	/**
+	 * Update the ref element for an existing item (used when upgrading
+	 * pre-created sidenotes from placeholder to real DOM ref).
+	 */
+	updateRefElement(id: string, newRef: HTMLElement): void {
+		const item = this.items.find(i => i.id === id);
+		if (item) item.refElement = newRef;
+	}
+
 	clear(): void {
 		this.items = [];
 	}
@@ -60,6 +73,15 @@ export class MarginItemRegistry {
 
 	private sortByDocumentOrder(items: MarginItem[]): void {
 		items.sort((a, b) => {
+			// Pre-created items may have detached placeholder refs —
+			// fall back to refTop comparison when either ref is disconnected.
+			const aConnected = a.refElement.isConnected;
+			const bConnected = b.refElement.isConnected;
+			if (!aConnected || !bConnected) {
+				const aTop = parseFloat(a.element.dataset.refTop || '0');
+				const bTop = parseFloat(b.element.dataset.refTop || '0');
+				return aTop - bTop;
+			}
 			const pos = a.refElement.compareDocumentPosition(b.refElement);
 			if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
 			if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;

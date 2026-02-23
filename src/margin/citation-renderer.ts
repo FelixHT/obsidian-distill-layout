@@ -12,6 +12,8 @@ export class CitationRenderer {
 	private parser: CitationParser;
 	private citations: HTMLElement[] = [];
 	private citationIndex = 0;
+	/** Track rendered citation IDs in memory — immune to Obsidian section virtualization. */
+	private renderedIds = new Set<string>();
 
 	constructor(settings: DistillLayoutSettings, registry: MarginItemRegistry, parser: CitationParser) {
 		this.settings = settings;
@@ -32,8 +34,8 @@ export class CitationRenderer {
 		const sizerRect = sizerEl.getBoundingClientRect();
 
 		for (const cite of citations) {
-			if (cite.refElement.dataset.distillCitationRendered) continue;
-			cite.refElement.dataset.distillCitationRendered = 'true';
+			if (this.renderedIds.has(cite.id)) continue;
+			this.renderedIds.add(cite.id);
 
 			this.citationIndex++;
 
@@ -47,8 +49,7 @@ export class CitationRenderer {
 					this.settings.citationStyle,
 					this.citationIndex
 				);
-				// Parse basic formatting (italicize title)
-				citationEl.innerHTML = this.formatWithEmphasis(formatted);
+				this.appendWithEmphasis(citationEl, formatted);
 			} else {
 				citationEl.textContent = cite.page
 					? `${cite.citekey}, ${cite.page}`
@@ -77,24 +78,29 @@ export class CitationRenderer {
 	}
 
 	/**
-	 * Convert text between \u201C...\u201D to <em> for title emphasis.
+	 * Append text to parent, wrapping \u201C...\u201D segments in <em> for title emphasis.
 	 */
-	private formatWithEmphasis(text: string): string {
-		// Escape HTML first
-		const escaped = text
-			.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;');
-		// Italicize quoted titles
-		return escaped.replace(/\u201C([^"\u201D]*)\u201D/g, '<em>\u201C$1\u201D</em>');
+	private appendWithEmphasis(parent: HTMLElement, text: string): void {
+		const parts = text.split(/(\u201C[^"\u201D]*\u201D)/);
+		for (const part of parts) {
+			if (part.startsWith('\u201C') && part.endsWith('\u201D')) {
+				const em = document.createElement('em');
+				em.textContent = part;
+				parent.appendChild(em);
+			} else if (part) {
+				parent.appendChild(document.createTextNode(part));
+			}
+		}
 	}
 
 	clear(): void {
 		for (const c of this.citations) c.remove();
 		this.citations = [];
 		this.citationIndex = 0;
+		this.renderedIds.clear();
 		this.registry.unregisterByType('citation');
 
+		// Best-effort DOM cleanup (may miss virtualized sections)
 		document.querySelectorAll('[data-distill-citation-rendered]').forEach(el => {
 			el.removeAttribute('data-distill-citation-rendered');
 		});

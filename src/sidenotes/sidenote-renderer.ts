@@ -1,5 +1,8 @@
 import type { ParsedFootnote, DistillLayoutSettings, MarginItem } from '../types';
 import type { MarginItemRegistry } from '../margin/margin-item-registry';
+import type { EditParsedFootnote } from './edit-footnote-parser';
+import { MarkdownRenderer, Component } from 'obsidian';
+import type { App } from 'obsidian';
 
 /**
  * Creates sidenote elements in the right column, positioned to align
@@ -8,6 +11,7 @@ import type { MarginItemRegistry } from '../margin/margin-item-registry';
  */
 export class SidenoteRenderer {
 	private settings: DistillLayoutSettings;
+	private app: App | null;
 	private registry: MarginItemRegistry | null;
 	private sidenotes: HTMLElement[] = [];
 	/** For alternating mode: track which side each sidenote is on. */
@@ -24,14 +28,353 @@ export class SidenoteRenderer {
 	private alternatingIndex = 0;
 	/** Currently highlighted element for annotation highlighting. */
 	private highlightedAnnotation: HTMLElement | null = null;
+	/** Track rendered sidenote IDs in memory — immune to Obsidian section virtualization. */
+	private renderedIds = new Set<string>();
+	/** Components created by MarkdownRenderer.render() in preRender(), must be unloaded on clear(). */
+	private preRenderComponents: Component[] = [];
 
-	constructor(settings: DistillLayoutSettings, registry?: MarginItemRegistry) {
+	constructor(settings: DistillLayoutSettings, registry?: MarginItemRegistry, app?: App) {
 		this.settings = settings;
+		this.app = app ?? null;
 		this.registry = registry ?? null;
 	}
 
 	updateSettings(settings: DistillLayoutSettings): void {
 		this.settings = settings;
+	}
+
+	getRenderedCount(): number {
+		return this.renderedIds.size;
+	}
+
+	/**
+	 * Pre-create sidenotes from source-parsed data with estimated positions.
+	 * Called on file-open before the full DOM is available, so sidenotes exist
+	 * immediately for the entire document. Positions are corrected later by
+	 * upgradePreCreated() when real DOM sections render.
+	 *
+	 * @param container      The primary container for sidenotes (scroll-synced track).
+	 * @param items          Edit-parsed footnotes from parseEditFootnotes().
+	 * @param sizerHeight    scrollHeight of the preview sizer for position estimation.
+	 * @param totalLines     Total line count in the source document.
+	 * @param altContainer   Optional second container for alternating mode (left track).
+	 */
+	preRender(
+		container: HTMLElement,
+		items: EditParsedFootnote[],
+		sizerHeight: number,
+		totalLines: number,
+		altContainer?: HTMLElement,
+		sourceText?: string
+	): void {
+		const isAlternating = this.settings.columnLayout === 'alternating' && !!altContainer;
+
+		// Build a mapping from source footnote IDs to Obsidian's sequential
+		// DOM numbering. Obsidian renumbers all footnotes sequentially (1, 2, 3…)
+		// by order of first reference. Without this mapping, preRender() would
+		// register e.g. "longer" in renderedIds but render() would look for "3",
+		// causing duplicates.
+		const seqMap = new Map<string, string>();
+		if (sourceText) {
+			const seen = new Set<string>();
+			const order: string[] = [];
+			const refRegex = /\[\^([^\]]+)\](?!:)/g;
+			let m;
+			while ((m = refRegex.exec(sourceText)) !== null) {
+				const refId = m[1]!;
+				const lineStart = sourceText.lastIndexOf('\n', m.index - 1) + 1;
+				const lineText = sourceText.slice(lineStart, sourceText.indexOf('\n', m.index));
+				if (/^\[\^[^\]]+\]:/.test(lineText)) continue;
+				if (!seen.has(refId)) {
+					seen.add(refId);
+					order.push(refId);
+				}
+			}
+			for (let i = 0; i < order.length; i++) {
+				seqMap.set(order[i]!, String(i + 1));
+			}
+		}
+
+		for (const item of items) {
+			// Normalize ID: strip `edit-` prefix so reading-mode IDs match.
+			// edit-custom-HASH → custom-HASH; standard footnote IDs have no prefix.
+			let id = item.id.startsWith('edit-') ? item.id.slice(5) : item.id;
+
+			// For standard footnotes (not custom syntax), use the sequential ID
+			// that Obsidian's DOM will produce, so renderedIds matches render().
+			if (item.type !== 'marginnote' && seqMap.has(id)) {
+				id = seqMap.get(id)!;
+			}
+
+			if (this.renderedIds.has(id)) continue;
+			this.renderedIds.add(id);
+
+			const isNumbered = item.type !== 'marginnote' && this.settings.showSidenoteNumbers;
+
+			// Create DOM element — same structure as render()
+			const note = document.createElement('div');
+			note.className = 'distill-sidenote distill-sidenote-estimated';
+			note.dataset.sidenoteId = id;
+			note.dataset.preCreated = 'true';
+			note.dataset.refLine = String(item.refLine);
+
+			if (isNumbered) {
+				const numberSpan = document.createElement('span');
+				numberSpan.className = 'distill-sidenote-number';
+				const badgeStyle = this.settings.numberBadgeStyle;
+				if (badgeStyle !== 'superscript') {
+					numberSpan.classList.add(`distill-badge-${badgeStyle}`);
+				}
+				// Temporary sequential number — will be corrected on upgrade
+				numberSpan.textContent = '·';
+				note.appendChild(numberSpan);
+			}
+
+			// Sidenote icon
+			if (item.icon && this.settings.sidenoteIconsEnabled) {
+				const iconSpan = document.createElement('span');
+				iconSpan.className = `distill-sidenote-icon distill-sidenote-icon-${item.icon}`;
+				note.appendChild(iconSpan);
+			}
+
+			const contentSpan = document.createElement('span');
+			contentSpan.className = 'distill-sidenote-content';
+
+			// Render markdown content if app is available, otherwise plain text
+			if (this.app && item.content) {
+				const wrapper = document.createElement('div');
+				const comp = new Component();
+				comp.load();
+				this.preRenderComponents.push(comp);
+				MarkdownRenderer.render(this.app, item.content, wrapper, '', comp);
+				if (isNumbered) contentSpan.appendChild(document.createTextNode(' '));
+				while (wrapper.firstChild) {
+					contentSpan.appendChild(wrapper.firstChild);
+				}
+			} else {
+				contentSpan.textContent = isNumbered ? ` ${item.content}` : item.content;
+			}
+
+			note.appendChild(contentSpan);
+
+			// Estimate position: (refLine / totalLines) * sizerHeight
+			const estimatedTop = (item.refLine / Math.max(totalLines, 1)) * sizerHeight;
+			note.style.top = `${estimatedTop}px`;
+			note.dataset.refTop = `${estimatedTop}px`;
+
+			// Determine column
+			let column: 'left' | 'right' = 'right';
+			if (isAlternating) {
+				const isOdd = this.alternatingIndex % 2 === 0;
+				const targetContainer = isOdd ? altContainer : container;
+				targetContainer.appendChild(note);
+				if (isOdd) {
+					this.leftSidenotes.push(note);
+					column = 'left';
+				} else {
+					this.rightSidenotes.push(note);
+					column = 'right';
+				}
+				this.alternatingIndex++;
+			} else {
+				container.appendChild(note);
+			}
+			this.sidenotes.push(note);
+
+			// Create detached placeholder ref for refMap
+			const placeholderRef = document.createElement('span');
+			this.refMap.set(note, placeholderRef);
+
+			// Register in MarginItemRegistry with detached placeholder
+			if (this.registry) {
+				const itemType = item.type === 'marginnote' ? 'marginnote' : 'sidenote';
+				this.registry.register({
+					element: note,
+					refElement: placeholderRef,
+					type: itemType,
+					id,
+					column,
+				});
+			}
+		}
+
+		// Assign sequential numbers based on document order (by refLine)
+		if (this.settings.showSidenoteNumbers) {
+			const numbered = this.sidenotes
+				.filter(n => n.dataset.preCreated === 'true' && n.querySelector('.distill-sidenote-number'))
+				.sort((a, b) => parseInt(a.dataset.refLine || '0', 10) - parseInt(b.dataset.refLine || '0', 10));
+			numbered.forEach((note, i) => {
+				const numSpan = note.querySelector('.distill-sidenote-number');
+				if (numSpan) numSpan.textContent = `${i + 1}`;
+			});
+		}
+
+		// Collision resolution
+		if (this.registry) {
+			this.registry.resolveAll();
+		} else {
+			if (isAlternating) {
+				this.resolveCollisionsLocal(this.leftSidenotes);
+				this.resolveCollisionsLocal(this.rightSidenotes);
+			} else {
+				this.resolveCollisionsLocal(this.sidenotes);
+			}
+		}
+
+		// Collapsible
+		if (this.settings.collapsibleSidenotes) {
+			this.applyCollapsible();
+		}
+
+		// Hover preview mode
+		if (this.settings.sidenoteDisplayMode === 'hover') {
+			this.applyHoverPreviewMode();
+		}
+	}
+
+	/**
+	 * Upgrade a pre-created sidenote with the real DOM ref element.
+	 * Called when render() detects a pre-created sidenote for a ParsedFootnote
+	 * whose section has become visible in the DOM.
+	 */
+	private upgradePreCreated(note: HTMLElement, fn: ParsedFootnote, sizerEl: HTMLElement): void {
+		const oldRef = this.refMap.get(note);
+
+		// Update refMap with real ref element
+		this.refMap.set(note, fn.refElement);
+		fn.refElement.dataset.sidenoteId = fn.id;
+
+		// Recalculate position from real DOM element
+		const sizerRect = sizerEl.getBoundingClientRect();
+		const refRect = fn.refElement.getBoundingClientRect();
+		const refTop = `${refRect.top - sizerRect.top}px`;
+		note.style.top = refTop;
+		note.dataset.refTop = refTop;
+
+		// Remove pre-created markers (triggers CSS transition)
+		delete note.dataset.preCreated;
+		delete note.dataset.refLine;
+		note.classList.remove('distill-sidenote-estimated');
+
+		// Update registry ref element
+		if (this.registry) {
+			this.registry.updateRefElement(fn.id, fn.refElement);
+		}
+
+		// If rich content is available from DOM, upgrade the content span
+		if (fn.contentEl) {
+			const contentSpan = note.querySelector('.distill-sidenote-content') as HTMLElement;
+			if (contentSpan) {
+				const isNumbered = fn.type !== 'marginnote' && this.settings.showSidenoteNumbers;
+				contentSpan.textContent = '';
+				const richClone = fn.contentEl.cloneNode(true) as HTMLElement;
+				if (isNumbered) {
+					contentSpan.appendChild(document.createTextNode(' '));
+				}
+				while (richClone.firstChild) {
+					contentSpan.appendChild(richClone.firstChild);
+				}
+			}
+		}
+
+		// Apply ref styling and interactions (these need the real ref element)
+		const isNumbered = fn.type !== 'marginnote' && this.settings.showSidenoteNumbers;
+		const positionMap = isNumbered ? this.buildPositionMap(sizerEl) : null;
+		const num = (positionMap && positionMap.get(fn.refElement)) ?? 0;
+		if (isNumbered) {
+			this.stylizeRef(fn.refElement, num);
+		}
+
+		// Prevent native footnote navigation
+		const refAnchor = fn.refElement.tagName === 'A'
+			? fn.refElement as HTMLAnchorElement
+			: fn.refElement.querySelector('a') as HTMLAnchorElement | null;
+		if (refAnchor) {
+			const preventNav = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
+			refAnchor.addEventListener('click', preventNav, true);
+			this.eventCleanup.push(() => refAnchor.removeEventListener('click', preventNav, true));
+
+			if (this.settings.suppressFootnoteHover) {
+				const suppressHover = (e: Event) => { e.stopPropagation(); };
+				refAnchor.addEventListener('mouseover', suppressHover, true);
+				this.eventCleanup.push(() => refAnchor.removeEventListener('mouseover', suppressHover, true));
+			}
+		}
+
+		// Cross-ref click handlers
+		if (this.settings.crossRefClickEnabled) {
+			this.addCrossRefHandlers(note, fn.refElement);
+		}
+
+		// Hover highlight
+		if (this.settings.hoverHighlight) {
+			this.addHoverHighlightHandlers(note, fn.refElement);
+		}
+
+		// Annotation highlighting
+		if (this.settings.annotationHighlight) {
+			this.addAnnotationHighlightHandler(note, fn.refElement);
+		}
+
+		// Insert inline fallback after the real ref element
+		const inline = this.createInlineFallback(fn, num, isNumbered);
+		fn.refElement.after(inline);
+		this.inlineNotes.push(inline);
+	}
+
+	/**
+	 * Recalculate all sidenote numbers based on current DOM order.
+	 * Call after late-arriving sections add new sidenotes, which may
+	 * shift the numbering of previously rendered ones.
+	 */
+	renumber(sizerEl: HTMLElement): void {
+		if (!this.settings.showSidenoteNumbers) return;
+		const positionMap = this.buildPositionMap(sizerEl);
+
+		// Build a unified numbering that includes pre-created items.
+		// Upgraded (real-ref) sidenotes use buildPositionMap; pre-created
+		// ones are sorted by refTop and interleaved by position.
+		const upgradedNotes: Array<{ note: HTMLElement; refEl: HTMLElement; top: number }> = [];
+		const preCreatedNotes: Array<{ note: HTMLElement; top: number }> = [];
+
+		for (const note of this.sidenotes) {
+			if (!note.querySelector('.distill-sidenote-number')) continue;
+			if (note.dataset.preCreated === 'true') {
+				preCreatedNotes.push({ note, top: parseFloat(note.dataset.refTop || '0') });
+			} else {
+				const refEl = this.refMap.get(note);
+				if (!refEl) continue;
+				const num = positionMap.get(refEl);
+				if (num == null) continue;
+				const refRect = refEl.isConnected ? refEl.getBoundingClientRect() : null;
+				const sizerRect = sizerEl.getBoundingClientRect();
+				const top = refRect ? refRect.top - sizerRect.top : parseFloat(note.dataset.refTop || '0');
+				upgradedNotes.push({ note, refEl, top });
+			}
+		}
+
+		// Merge both lists sorted by vertical position
+		const all = [
+			...upgradedNotes.map(u => ({ ...u, isPreCreated: false as const })),
+			...preCreatedNotes.map(p => ({ ...p, refEl: undefined, isPreCreated: true as const })),
+		].sort((a, b) => a.top - b.top);
+
+		let counter = 1;
+		for (const item of all) {
+			const numberSpan = item.note.querySelector('.distill-sidenote-number');
+			if (numberSpan) numberSpan.textContent = `${counter}`;
+
+			if (!item.isPreCreated && item.refEl) {
+				item.refEl.dataset.distillSidenoteNum = `${counter}`;
+				const anchor = item.refEl.tagName === 'A'
+					? item.refEl as HTMLAnchorElement
+					: item.refEl.querySelector('a') as HTMLAnchorElement | null;
+				if (anchor?.classList.contains('distill-ref-number')) {
+					anchor.textContent = `${counter}`;
+				}
+			}
+			counter++;
+		}
 	}
 
 	/**
@@ -50,11 +393,39 @@ export class SidenoteRenderer {
 		const isAlternating = this.settings.columnLayout === 'alternating' && !!altContainer;
 		const sizerRect = sizerEl.getBoundingClientRect();
 		const positionMap = this.buildPositionMap(sizerEl);
+		let addedNew = false;
 
 		for (const fn of footnotes) {
-			// Skip if already rendered
-			if (fn.refElement.dataset.distillSidenoteRendered) continue;
-			fn.refElement.dataset.distillSidenoteRendered = 'true';
+			// Skip if already rendered — but check connectivity first.
+			// When the virtualizer unloads a section, the sidenote DOM element
+			// may become disconnected while renderedIds still has the ID.
+			if (this.renderedIds.has(fn.id)) {
+				const existing = this.sidenotes.find(n => n.dataset.sidenoteId === fn.id);
+				if (existing?.isConnected) {
+					// Pre-created sidenote → upgrade with real DOM ref
+					if (existing.dataset.preCreated === 'true') {
+						this.upgradePreCreated(existing, fn, sizerEl);
+						addedNew = true; // trigger post-render recalc
+						continue;
+					}
+					// Sidenote still live — update ref mapping if refElement changed
+					const oldRef = this.refMap.get(existing);
+					if (oldRef && !oldRef.isConnected && fn.refElement.isConnected) {
+						this.refMap.set(existing, fn.refElement);
+						fn.refElement.dataset.sidenoteId = fn.id;
+					}
+					continue;
+				}
+				// Stale entry — clean up and fall through to re-render
+				this.renderedIds.delete(fn.id);
+				this.sidenotes = this.sidenotes.filter(n => n !== existing);
+				if (existing) this.refMap.delete(existing);
+				this.leftSidenotes = this.leftSidenotes.filter(n => n !== existing);
+				this.rightSidenotes = this.rightSidenotes.filter(n => n !== existing);
+				if (this.registry) this.registry.unregisterById(fn.id);
+			}
+			this.renderedIds.add(fn.id);
+			addedNew = true;
 
 			// Bug 2 fix: prevent the original <a> from triggering
 			// Obsidian's native scroll-to-anchor (which fires layout-change
@@ -203,6 +574,11 @@ export class SidenoteRenderer {
 			this.inlineNotes.push(inline);
 		}
 
+		// Only do post-render work if new sidenotes were actually created.
+		// Calling recalcAllPositions when nothing changed would reset
+		// collision-resolved positions back to raw refTop, causing overlaps.
+		if (!addedNew) return;
+
 		// Recalculate refTop for ALL sidenotes — earlier render() calls may
 		// have computed positions before the DOM was complete (sections arrive
 		// incrementally, shifting layout between calls).
@@ -298,6 +674,10 @@ export class SidenoteRenderer {
 			const refA = this.refMap.get(a);
 			const refB = this.refMap.get(b);
 			if (!refA || !refB) return 0;
+			// Fall back to refTop when either ref is disconnected (pre-created)
+			if (!refA.isConnected || !refB.isConnected) {
+				return parseFloat(a.dataset.refTop || '0') - parseFloat(b.dataset.refTop || '0');
+			}
 			const pos = refA.compareDocumentPosition(refB);
 			if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
 			if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
@@ -311,6 +691,9 @@ export class SidenoteRenderer {
 			const refA = this.refMap.get(a);
 			const refB = this.refMap.get(b);
 			if (!refA || !refB) return 0;
+			if (!refA.isConnected || !refB.isConnected) {
+				return parseFloat(a.dataset.refTop || '0') - parseFloat(b.dataset.refTop || '0');
+			}
 			const pos = refA.compareDocumentPosition(refB);
 			if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
 			if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
@@ -392,24 +775,42 @@ export class SidenoteRenderer {
 		}
 	}
 
-	/** 1c: Add click-to-scroll between sidenote and its reference. */
+	/** 1c: Add click-to-scroll between sidenote and its reference.
+	 *
+	 * Elements live inside a transform-translated column with overflow:hidden,
+	 * so scrollIntoView() targets the wrong container. Instead, scroll the
+	 * main .markdown-preview-view directly using scrollTo().
+	 */
 	private addCrossRefHandlers(noteEl: HTMLElement, refEl: HTMLElement): void {
 		// Click sidenote number → scroll to ref
 		const numberSpan = noteEl.querySelector('.distill-sidenote-number');
 		if (numberSpan) {
 			const handler = (e: Event) => {
 				e.preventDefault();
-				refEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				const previewView = refEl.closest('.markdown-preview-view') as HTMLElement;
+				if (!previewView) return;
+				const sizer = previewView.querySelector('.markdown-preview-sizer') as HTMLElement;
+				if (!sizer) return;
+				const sizerRect = sizer.getBoundingClientRect();
+				const refRect = refEl.getBoundingClientRect();
+				const refDocTop = refRect.top - sizerRect.top;
+				const viewportHeight = previewView.clientHeight;
+				previewView.scrollTo({ top: refDocTop - viewportHeight / 2, behavior: 'smooth' });
 			};
 			numberSpan.addEventListener('click', handler);
 			// No cleanup needed — numberSpan is removed with sidenote
 		}
 
-		// Click ref → scroll to sidenote
+		// Click ref → scroll so sidenote region is visible
 		const refHandler = (e: Event) => {
 			e.preventDefault();
 			e.stopPropagation();
-			noteEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			const previewView = refEl.closest('.markdown-preview-view') as HTMLElement;
+			if (!previewView) return;
+			// noteEl.style.top is in document coordinates (relative to sizer)
+			const noteDocTop = parseFloat(noteEl.style.top) || 0;
+			const viewportHeight = previewView.clientHeight;
+			previewView.scrollTo({ top: noteDocTop - viewportHeight / 3, behavior: 'smooth' });
 		};
 		refEl.addEventListener('click', refHandler);
 		this.eventCleanup.push(() => refEl.removeEventListener('click', refHandler));
@@ -644,6 +1045,11 @@ export class SidenoteRenderer {
 		this.alternatingIndex = 0;
 		this.inlineNotes = [];
 		this.refMap.clear();
+		this.renderedIds.clear();
+
+		// Unload MarkdownRenderer components from preRender()
+		for (const comp of this.preRenderComponents) comp.unload();
+		this.preRenderComponents = [];
 
 		if (this.repositionLoadTimer) {
 			clearTimeout(this.repositionLoadTimer);

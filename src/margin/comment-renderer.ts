@@ -10,6 +10,8 @@ export class CommentRenderer {
 	private registry: MarginItemRegistry;
 	private comments: HTMLElement[] = [];
 	private inlineComments: HTMLElement[] = [];
+	/** Track rendered comment IDs in memory — immune to Obsidian section virtualization. */
+	private renderedIds = new Set<string>();
 
 	constructor(settings: DistillLayoutSettings, registry: MarginItemRegistry) {
 		this.settings = settings;
@@ -29,8 +31,8 @@ export class CommentRenderer {
 		const sizerRect = sizerEl.getBoundingClientRect();
 
 		for (const comment of comments) {
-			if (comment.refElement.dataset.distillCommentRendered) continue;
-			comment.refElement.dataset.distillCommentRendered = 'true';
+			if (this.renderedIds.has(comment.id)) continue;
+			this.renderedIds.add(comment.id);
 
 			const commentEl = document.createElement('div');
 			commentEl.className = 'distill-margin-comment';
@@ -93,8 +95,10 @@ export class CommentRenderer {
 		for (const inline of this.inlineComments) inline.remove();
 		this.comments = [];
 		this.inlineComments = [];
+		this.renderedIds.clear();
 		this.registry.unregisterByType('comment');
 
+		// Best-effort DOM cleanup (may miss virtualized sections)
 		document.querySelectorAll('[data-distill-comment-rendered]').forEach(el => {
 			el.removeAttribute('data-distill-comment-rendered');
 		});

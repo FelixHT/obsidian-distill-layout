@@ -1,75 +1,94 @@
 import type { HeadingEntry } from '../types';
 
 /**
- * Uses IntersectionObserver to track which heading is currently
- * in the viewport's "active zone" (top ~20%).
- * Reports the active heading ID for highlight tracking.
+ * Scroll-position-based active heading tracker for reading mode.
+ *
+ * Uses scrollTop comparison against heading positions (same pattern as
+ * EditTocTracker) instead of IntersectionObserver.  This works for
+ * both DOM-present and virtualized headings, since it only needs the
+ * `top` value — no actual DOM element observation required.
  */
 export class TocTracker {
-	private observer: IntersectionObserver | null = null;
-	private activeId: string = '';
+	private activeId = '';
 	private onActiveChange: (headingId: string) => void;
+	private scrollHandler: (() => void) | null = null;
+	private scrollContainer: HTMLElement | null = null;
+	private headings: HeadingEntry[] = [];
 
 	constructor(onActiveChange: (headingId: string) => void) {
 		this.onActiveChange = onActiveChange;
 	}
 
 	/**
-	 * Start tracking the given headings.
-	 * @param scrollContainer The element that actually scrolls
-	 *   (`.workspace-leaf-content[data-type="markdown"]`).
+	 * Start tracking the given headings against the scroll container.
+	 * @param scrollContainer  `.markdown-preview-view` (the scroll container).
 	 */
 	observe(headings: HeadingEntry[], scrollContainer: HTMLElement): void {
 		this.disconnect();
 
 		if (headings.length === 0) return;
 
-		// Trigger zone: top 10% to 80% → heading in upper portion activates
-		this.observer = new IntersectionObserver(
-			(entries) => {
-				// Collect all currently-intersecting headings
-				const visible: { id: string; top: number }[] = [];
+		this.headings = headings;
+		this.scrollContainer = scrollContainer;
 
-				for (const entry of entries) {
-					if (entry.isIntersecting) {
-						const id = (entry.target as HTMLElement).dataset.distillHeadingId || '';
-						visible.push({ id, top: entry.boundingClientRect.top });
-					}
-				}
+		this.scrollHandler = () => this.update();
+		scrollContainer.addEventListener('scroll', this.scrollHandler, { passive: true });
 
-				if (visible.length > 0) {
-					// Pick the topmost intersecting heading
-					visible.sort((a, b) => a.top - b.top);
-					const topId = visible[0]!.id;
-					if (topId && topId !== this.activeId) {
-						this.activeId = topId;
-						this.onActiveChange(topId);
-					}
+		// Set initial active heading
+		this.update();
+	}
+
+	/**
+	 * Update heading references and positions after sections render.
+	 * Called from processSection() when newly rendered headings are linked.
+	 */
+	updateHeadings(headings: HeadingEntry[]): void {
+		this.headings = headings;
+	}
+
+	private update(): void {
+		if (!this.scrollContainer || this.headings.length === 0) return;
+
+		const scrollTop = this.scrollContainer.scrollTop;
+		const viewportHeight = this.scrollContainer.clientHeight;
+		// Activation threshold: 20% into the viewport
+		const threshold = scrollTop + viewportHeight * 0.2;
+
+		// Recompute top for DOM-present headings to stay accurate
+		const sizer = this.scrollContainer.querySelector('.markdown-preview-sizer') as HTMLElement;
+		if (sizer) {
+			const sizerRect = sizer.getBoundingClientRect();
+			for (const h of this.headings) {
+				if (h.element !== sizer && h.element.isConnected) {
+					h.top = h.element.getBoundingClientRect().top - sizerRect.top;
 				}
-				// When nothing intersects, keep last active (user is between headings)
-			},
-			{
-				root: scrollContainer,
-				rootMargin: '-10% 0px -80% 0px',
-				threshold: 0,
 			}
-		);
-
-		for (const heading of headings) {
-			heading.element.dataset.distillHeadingId = heading.id;
-			this.observer.observe(heading.element);
 		}
 
-		// Set initial active to first heading
-		if (headings[0]) {
-			this.activeId = headings[0].id;
-			this.onActiveChange(this.activeId);
+		// Find the last heading whose top is above the threshold
+		let activeId = this.headings[0]!.id;
+		for (const heading of this.headings) {
+			if (heading.top <= threshold) {
+				activeId = heading.id;
+			} else {
+				break;
+			}
+		}
+
+		if (activeId !== this.activeId) {
+			this.activeId = activeId;
+			this.onActiveChange(activeId);
 		}
 	}
 
 	disconnect(): void {
-		this.observer?.disconnect();
-		this.observer = null;
+		if (this.scrollHandler && this.scrollContainer) {
+			this.scrollContainer.removeEventListener('scroll', this.scrollHandler);
+		}
+		this.scrollHandler = null;
+		this.scrollContainer = null;
+		this.headings = [];
+		this.activeId = '';
 	}
 
 	destroy(): void {

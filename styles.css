@@ -36,23 +36,14 @@ body.distill-layout-active [data-distill-figure-parsed] {
 	display: none !important;
 }
 
-/* Intermediates: BOTH axes visible (prevents CSS overflow coercion) */
-body.distill-layout-active .workspace-leaf-content[data-type="markdown"] .view-content,
-body.distill-layout-active .workspace-leaf-content[data-type="markdown"] .markdown-reading-view,
-body.distill-layout-active .workspace-leaf-content[data-type="markdown"] .markdown-preview-view,
-body.distill-layout-active .workspace-leaf-content[data-type="markdown"] .markdown-preview-sizer,
-body.distill-layout-active .workspace-leaf-content[data-type="markdown"] .markdown-preview-section {
-	overflow: visible !important;
-}
+/* Scroll-synced overlay: NO overflow manipulation needed.
+   .markdown-preview-view keeps its native overflow/scroll behavior.
+   Columns are absolutely positioned children of .markdown-preview-view,
+   sitting in the padding area. The right column clips a scroll-synced track. */
 
-/* The leaf-content itself: scrolls vertically */
-body.distill-layout-active .workspace-leaf-content[data-type="markdown"] {
-	overflow-y: auto !important;
-}
-
-/* Split pane support */
-body.distill-layout-active .workspace-split.mod-vertical {
-	overflow: visible !important;
+/* .markdown-preview-view is the positioning context for overlay columns */
+body.distill-layout-active .markdown-preview-view {
+	position: relative;
 }
 
 /* Add padding so columns fit within the scrollable content area (wide mode only) */
@@ -85,30 +76,70 @@ body.distill-layout-active .markdown-preview-view pre {
 
 /* =============================================
    Column Containers
-   Absolutely positioned inside .markdown-preview-sizer
+   Absolutely positioned inside .workspace-leaf-content (non-scrolling).
+   Columns are naturally viewport-fixed — no JS transforms needed.
+   The right column clips a scroll-synced track that keeps sidenotes aligned.
    ============================================= */
 
-.distill-left-column,
-.distill-right-column {
-	position: absolute;
-	top: 0;
-	overflow: visible;
-	pointer-events: none;
+/* Positioning context for columns on the non-scrolling parent */
+body.distill-layout-active .workspace-leaf-content:has(.markdown-preview-view) {
+	position: relative;
 }
 
-.distill-left-column > *,
+.distill-left-column {
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: var(--distill-toc-width);
+	overflow: visible;
+	pointer-events: none;
+	z-index: 10;
+}
+
+.distill-left-column > * {
+	pointer-events: auto;
+}
+
+.distill-right-column {
+	position: absolute;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	width: var(--distill-sidenote-width);
+	overflow: hidden;
+	pointer-events: none;
+	z-index: 10;
+}
+
 .distill-right-column > * {
 	pointer-events: auto;
 }
 
-.distill-left-column {
-	width: var(--distill-toc-width);
-	right: calc(100% + var(--distill-gutter-width));
+/* Swapped layout: left column clips sidenote track, right column shows TOC */
+body.distill-layout-swapped .distill-left-column {
+	overflow: hidden;
 }
 
-.distill-right-column {
-	width: var(--distill-sidenote-width);
-	left: calc(100% + var(--distill-gutter-width));
+/* Alternating layout: left column clips its scroll-synced track */
+body.distill-layout-alternating .distill-left-column {
+	overflow: hidden;
+}
+
+body.distill-layout-swapped .distill-right-column {
+	overflow: visible;
+}
+
+/* Sidenote scroll track — translates with preview-view scroll */
+.distill-sidenote-track {
+	position: relative;
+	width: 100%;
+	will-change: transform;
+	pointer-events: none;
+}
+
+.distill-sidenote-track > * {
+	pointer-events: auto;
 }
 
 /* =============================================
@@ -116,12 +147,11 @@ body.distill-layout-active .markdown-preview-view pre {
    ============================================= */
 
 .distill-toc {
-	position: sticky;
-	top: 20px;
 	max-height: calc(100vh - 40px);
 	overflow-y: auto;
 	-ms-overflow-style: none;
 	scrollbar-width: none;
+	padding-top: 20px;
 }
 
 .distill-toc::-webkit-scrollbar {
@@ -522,6 +552,16 @@ body.distill-layout-active .markdown-preview-view pre {
 }
 
 /* =============================================
+   Pre-Created Sidenote Transition
+   Estimated position → exact position on upgrade
+   ============================================= */
+
+.distill-sidenote-estimated {
+	opacity: 0.85;
+	transition: opacity 0.3s ease, top 0.3s ease;
+}
+
+/* =============================================
    Sidenote Entrance Animations (Feature 17)
    ============================================= */
 
@@ -820,6 +860,11 @@ body.distill-layout-active .markdown-preview-view pre {
    Columns as siblings of .cm-editor inside .markdown-source-view
    ============================================= */
 
+/* Edit mode: hide inline figure embeds when using margin-only display */
+.distill-edit-figure-hidden {
+	display: none !important;
+}
+
 /* Edit mode: positioning context */
 body.distill-layout-active .markdown-source-view.distill-edit-active {
 	position: relative;
@@ -873,6 +918,15 @@ body.distill-layout-alternating.distill-layout-active .markdown-source-view.dist
 	pointer-events: auto;
 }
 
+/* Swapped layout: left column clips sidenote track, right column shows TOC */
+body.distill-layout-swapped .distill-edit-left-column {
+	overflow: hidden;
+}
+
+body.distill-layout-swapped .distill-edit-right-column {
+	overflow: visible;
+}
+
 /* Sidenote scroll track — translates with CM scroll */
 .distill-edit-sidenote-track {
 	position: relative;
@@ -912,6 +966,12 @@ body.distill-layout-alternating.distill-layout-active .markdown-source-view.dist
 /* Show inline sidenotes in narrow mode */
 .distill-narrow .distill-inline-sidenote {
 	display: inline;
+}
+
+/* Hide the original ref number in narrow mode — the inline label replaces it.
+   Uses :has(+ sibling) so it works even when virtualization drops data-sidenote-id. */
+.distill-narrow sup:has(+ .distill-inline-sidenote) {
+	display: none;
 }
 
 /* Margin notes always visible in narrow mode (no toggle) */

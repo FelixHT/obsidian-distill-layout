@@ -426,6 +426,20 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(marginSection)
+			.setName('Edit mode figure display')
+			.setDesc('Where to show figures in edit/live-preview mode.')
+			.addDropdown(d => d
+				.addOption('margin-only', 'Margin only')
+				.addOption('both', 'Both inline and margin')
+				.addOption('inline-only', 'Inline only')
+				.setValue(this.plugin.settings.editFigureDisplayMode)
+				.onChange(async v => {
+					this.plugin.settings.editFigureDisplayMode = v as 'margin-only' | 'both' | 'inline-only';
+					await this.save();
+				})
+			);
+
+		new Setting(marginSection)
 			.setName('Margin code')
 			.setDesc('Move ```margin-lang code blocks to the margin column.')
 			.addToggle(t => t

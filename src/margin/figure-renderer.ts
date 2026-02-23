@@ -11,6 +11,8 @@ export class FigureRenderer {
 	private registry: MarginItemRegistry;
 	private figures: HTMLElement[] = [];
 	private inlineFigures: HTMLElement[] = [];
+	/** Track rendered figure IDs in memory — immune to Obsidian section virtualization. */
+	private renderedIds = new Set<string>();
 
 	constructor(settings: DistillLayoutSettings, registry: MarginItemRegistry) {
 		this.settings = settings;
@@ -30,8 +32,24 @@ export class FigureRenderer {
 		const sizerRect = sizerEl.getBoundingClientRect();
 
 		for (const fig of figures) {
-			if (fig.refElement.dataset.distillFigureRendered) continue;
-			fig.refElement.dataset.distillFigureRendered = 'true';
+			if (this.renderedIds.has(fig.id)) {
+				const existing = this.figures.find(f => f.dataset.figureId === fig.id);
+				if (existing?.isConnected) continue;
+				// Stale entry — clean up and fall through to re-render
+				this.renderedIds.delete(fig.id);
+				this.figures = this.figures.filter(f => f !== existing);
+				this.inlineFigures = this.inlineFigures.filter(f => {
+					// Remove inline fallback associated with this figure
+					if (f.previousElementSibling?.classList.contains('distill-figure-marker') &&
+						(f.previousElementSibling as HTMLElement)?.dataset?.figureId === fig.id) {
+						f.remove();
+						return false;
+					}
+					return true;
+				});
+				this.registry.unregisterById(fig.id);
+			}
+			this.renderedIds.add(fig.id);
 
 			const figureEl = document.createElement('figure');
 			figureEl.className = 'distill-margin-figure';
@@ -93,12 +111,15 @@ export class FigureRenderer {
 		for (const inline of this.inlineFigures) inline.remove();
 		this.figures = [];
 		this.inlineFigures = [];
+		this.renderedIds.clear();
 		this.registry.unregisterByType('figure');
 
+		// Best-effort DOM cleanup (may miss virtualized sections)
 		document.querySelectorAll('[data-distill-figure-rendered]').forEach(el => {
 			el.removeAttribute('data-distill-figure-rendered');
 		});
 		document.querySelectorAll('[data-distill-figure-parsed]').forEach(el => {
+			(el as HTMLElement).style.display = '';
 			el.removeAttribute('data-distill-figure-parsed');
 		});
 	}

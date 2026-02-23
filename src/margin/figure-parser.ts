@@ -49,14 +49,14 @@ export class FigureParser {
 			const prevText = this.findAdjacentText(embed, 'before');
 			if (!prevText) continue;
 
-			const prefixMatch = prevText.textContent?.match(/\{>fig:$/);
+			const prefixMatch = prevText.textContent?.match(/\{>fig:\s*$/);
 			if (!prefixMatch) continue;
 
 			// Check next text node for |caption} or just }
 			const nextText = this.findAdjacentText(embed, 'after');
 			if (!nextText) continue;
 
-			const suffixMatch = nextText.textContent?.match(/^(?:\|([^}]*))?\}/);
+			const suffixMatch = nextText.textContent?.match(/^\s*(?:\|([^}]*))?\}/);
 			if (!suffixMatch) continue;
 
 			const caption = suffixMatch[1]?.trim() || '';
@@ -75,10 +75,12 @@ export class FigureParser {
 			marker.dataset.figureCaption = caption;
 			marker.dataset.figureId = id;
 			(embed as HTMLElement).dataset.distillFigureParsed = 'true';
+			(embed as HTMLElement).style.display = 'none';  // resilient to CSS specificity issues
 
-			// Clean up: remove {>fig: from preceding text
+			// Clean up: remove {>fig: (with optional trailing whitespace) from preceding text
 			const prevContent = prevText.textContent || '';
-			prevText.textContent = prevContent.slice(0, prevContent.length - '{>fig:'.length);
+			const prefixLen = prefixMatch[0].length;
+			prevText.textContent = prevContent.slice(0, prevContent.length - prefixLen);
 
 			// Clean up: remove |caption} or } from following text
 			const nextContent = nextText.textContent || '';
@@ -154,12 +156,73 @@ export class FigureParser {
 
 	/**
 	 * Find the adjacent text node before or after an element.
-	 * Walks through siblings to find the nearest text node.
+	 * Handles three DOM structures:
+	 *   1. Direct sibling text nodes (text and embed in same parent)
+	 *   2. Text inside adjacent element siblings (e.g. <p>{>fig:</p> <embed>)
+	 *   3. Text in parent's adjacent sibling (embed in separate section div)
 	 */
 	private findAdjacentText(el: Element, direction: 'before' | 'after'): Text | null {
-		const sibling = direction === 'before' ? el.previousSibling : el.nextSibling;
-		if (sibling?.nodeType === Node.TEXT_NODE) {
-			return sibling as Text;
+		// Level 1: walk siblings at the same level
+		let current: Node | null = direction === 'before' ? el.previousSibling : el.nextSibling;
+		while (current) {
+			if (current.nodeType === Node.TEXT_NODE) {
+				if (current.textContent && current.textContent.trim().length > 0) {
+					return current as Text;
+				}
+				// Whitespace-only text — skip
+				current = direction === 'before' ? current.previousSibling : current.nextSibling;
+				continue;
+			}
+			if (current.nodeType === Node.COMMENT_NODE ||
+				(current.nodeType === Node.ELEMENT_NODE && (current as Element).tagName === 'BR')) {
+				current = direction === 'before' ? current.previousSibling : current.nextSibling;
+				continue;
+			}
+			// Element node — look inside it for text
+			if (current.nodeType === Node.ELEMENT_NODE) {
+				const found = this.findTextInElement(current as Element, direction);
+				if (found) return found;
+			}
+			break;
+		}
+
+		// Level 2: check parent's adjacent sibling (cross section boundary)
+		const parent = el.parentElement;
+		if (parent) {
+			const adjacentParent = direction === 'before'
+				? parent.previousElementSibling
+				: parent.nextElementSibling;
+			if (adjacentParent) {
+				return this.findTextInElement(adjacentParent, direction);
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Find a significant text node inside an element.
+	 * For 'before': returns the last non-whitespace text node.
+	 * For 'after': returns the first non-whitespace text node.
+	 */
+	private findTextInElement(el: Element, direction: 'before' | 'after'): Text | null {
+		const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+		if (direction === 'before') {
+			let last: Text | null = null;
+			let n;
+			while ((n = walker.nextNode())) {
+				if (n.textContent && n.textContent.trim().length > 0) {
+					last = n as Text;
+				}
+			}
+			return last;
+		} else {
+			let n;
+			while ((n = walker.nextNode())) {
+				if (n.textContent && n.textContent.trim().length > 0) {
+					return n as Text;
+				}
+			}
 		}
 		return null;
 	}

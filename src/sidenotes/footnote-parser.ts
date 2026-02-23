@@ -1,5 +1,6 @@
 import type { ParsedFootnote, DistillLayoutSettings } from '../types';
 import { parseDefinitions } from './edit-footnote-parser';
+import { App, MarkdownRenderer, Component } from 'obsidian';
 
 /**
  * Parses footnote references and their content from the rendered Reading View DOM.
@@ -7,10 +8,12 @@ import { parseDefinitions } from './edit-footnote-parser';
  */
 export class FootnoteParser {
 	private settings: DistillLayoutSettings;
+	private app: App;
 	private pendingObservers: Map<HTMLElement, MutationObserver> = new Map();
 
-	constructor(settings: DistillLayoutSettings) {
+	constructor(settings: DistillLayoutSettings, app: App) {
 		this.settings = settings;
+		this.app = app;
 	}
 
 	updateSettings(settings: DistillLayoutSettings): void {
@@ -31,7 +34,8 @@ export class FootnoteParser {
 	parseSection(
 		sectionEl: HTMLElement,
 		previewView: HTMLElement,
-		onParsed: (footnotes: ParsedFootnote[]) => void
+		onParsed: (footnotes: ParsedFootnote[]) => void,
+		sourceText?: string
 	): void {
 		const refs = this.findRefs(sectionEl);
 		if (refs.length === 0) return;
@@ -40,9 +44,24 @@ export class FootnoteParser {
 
 		if (footnotesSection) {
 			const footnotes = this.resolveContent(refs, footnotesSection);
-			if (footnotes.length > 0) onParsed(footnotes);
-		} else {
-			// Footnotes section hasn't rendered yet - observe for it
+			if (footnotes.length > 0) {
+				onParsed(footnotes);
+				return;
+			}
+			// DOM resolution found the section but failed to match IDs —
+			// fall through to source text fallback instead of silently dropping.
+		}
+
+		if (sourceText) {
+			// Footnotes section is virtualized or DOM IDs didn't match — fall back to source text
+			const defs = parseDefinitions(sourceText);
+			if (defs.size > 0) {
+				const refOrder = this.extractRefOrder(sourceText);
+				const footnotes = this.resolveFromSource(refs, defs, refOrder);
+				if (footnotes.length > 0) onParsed(footnotes);
+			}
+		} else if (!footnotesSection) {
+			// Footnotes section hasn't rendered yet and no source text - observe for it
 			this.observeForSection(previewView, refs, onParsed);
 		}
 	}
@@ -62,20 +81,24 @@ export class FootnoteParser {
 
 		const footnotesSection = this.findFootnotesSection(previewView);
 		if (footnotesSection) {
-			return this.resolveContent(refs, footnotesSection);
+			const resolved = this.resolveContent(refs, footnotesSection);
+			if (resolved.length > 0) return resolved;
+			// DOM resolution found the section but failed to match IDs —
+			// fall through to source text fallback instead of returning empty.
 		}
 
-		// DOM section not available — try source text fallback
+		// DOM section not available or IDs didn't match — try source text fallback
 		if (sourceText) {
 			const defs = parseDefinitions(sourceText);
 			if (defs.size > 0) {
 				const refOrder = this.extractRefOrder(sourceText);
-				return this.resolveFromSource(refs, defs, refOrder);
+				const resolved = this.resolveFromSource(refs, defs, refOrder);
+				if (resolved.length > 0) return resolved;
 			}
 		}
 
 		// Last resort: observe for late-arriving DOM section
-		if (onLateResolved) {
+		if (onLateResolved && !footnotesSection) {
 			this.observeForSection(previewView, refs, onLateResolved);
 		}
 		return [];
@@ -175,7 +198,117 @@ export class FootnoteParser {
 			}
 		}
 
+		// ── Phase C: Cross-element matching (e.g., {>!icon: text with `code` more text}) ──
+		// When Obsidian renders backticks as <code> elements, the {>...} pattern
+		// spans multiple DOM nodes. Phase B only matches within single text nodes.
+		// Here we check block elements' textContent for unhandled patterns.
+		const blocks = el.querySelectorAll('p, li, td, th, dt, dd');
+		const blockList: HTMLElement[] = Array.from(blocks) as HTMLElement[];
+		// Also check el itself if it's a block
+		if (['P', 'LI', 'TD', 'TH', 'DT', 'DD', 'DIV'].includes(el.tagName)) {
+			blockList.push(el);
+		}
+
+		for (const block of blockList) {
+			const fullText = block.textContent || '';
+			regex.lastIndex = 0;
+			let crossMatch;
+			while ((crossMatch = regex.exec(fullText)) !== null) {
+				const matchText = crossMatch[0]!;
+				const icon = crossMatch[1]?.trim() || '';
+				const content = crossMatch[3]?.trim() || '';
+				if (!content) continue;
+
+				// Skip if already handled by Phase A or B (marker with this content exists)
+				const existingMarker = block.querySelector(
+					'span.distill-sidenote-marker'
+				);
+				if (existingMarker) {
+					const markerContent = (existingMarker as HTMLElement).dataset.sidenoteContent;
+					if (markerContent === content) continue;
+				}
+
+				// Find the DOM range: text node with "{>" prefix and text node with "}" suffix
+				const range = this.findCrossElementRange(block, matchText);
+				if (!range) continue;
+
+				const baseId = `custom-${this.hashContent(content)}`;
+				const count = idCounts.get(baseId) || 0;
+				idCounts.set(baseId, count + 1);
+				const id = count > 0 ? `${baseId}-${count}` : baseId;
+
+				const marker = document.createElement('span');
+				marker.className = 'distill-sidenote-marker';
+				marker.dataset.sidenoteContent = content;
+				marker.dataset.footnoteId = id;
+				marker.dataset.sidenoteId = id;
+				if (icon) {
+					marker.dataset.sidenoteIcon = icon;
+				}
+
+				range.deleteContents();
+				range.insertNode(marker);
+
+				results.push({
+					id,
+					refElement: marker,
+					content,
+					type: 'marginnote',
+					icon: icon || undefined,
+				});
+
+				// Reset regex after DOM mutation
+				break;
+			}
+		}
+
 		return results;
+	}
+
+	/**
+	 * Find a DOM Range covering a {>...} match that spans multiple nodes.
+	 * Walks text nodes within the block, building a concatenated string,
+	 * and maps the match boundaries back to specific text node offsets.
+	 */
+	private findCrossElementRange(block: HTMLElement, matchText: string): Range | null {
+		const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null);
+		const nodes: { node: Text; start: number; end: number }[] = [];
+		let offset = 0;
+		let n;
+		while ((n = walker.nextNode())) {
+			const len = (n.textContent || '').length;
+			nodes.push({ node: n as Text, start: offset, end: offset + len });
+			offset += len;
+		}
+
+		const fullText = block.textContent || '';
+		const matchStart = fullText.indexOf(matchText);
+		if (matchStart === -1) return null;
+		const matchEnd = matchStart + matchText.length;
+
+		// Find start node + offset
+		let startNode: Text | null = null;
+		let startOffset = 0;
+		let endNode: Text | null = null;
+		let endOffset = 0;
+
+		for (const { node, start, end } of nodes) {
+			if (startNode === null && matchStart >= start && matchStart < end) {
+				startNode = node;
+				startOffset = matchStart - start;
+			}
+			if (matchEnd > start && matchEnd <= end) {
+				endNode = node;
+				endOffset = matchEnd - start;
+			}
+		}
+
+		if (!startNode || !endNode) return null;
+
+		const range = document.createRange();
+		range.setStart(startNode, startOffset);
+		range.setEnd(endNode, endOffset);
+		return range;
 	}
 
 	/**
@@ -310,7 +443,10 @@ export class FootnoteParser {
 				if (originalId) content = definitions.get(originalId);
 			}
 			if (content) {
-				results.push({ id, refElement: el, content, type: 'sidenote' });
+				// Render markdown to HTML so bold/italic/links display correctly
+				const wrapper = document.createElement('div');
+				MarkdownRenderer.render(this.app, content, wrapper, '', new Component());
+				results.push({ id, refElement: el, content, contentEl: wrapper, type: 'sidenote' });
 			}
 		}
 		return results;

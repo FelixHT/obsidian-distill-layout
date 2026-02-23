@@ -69,6 +69,8 @@ export interface DistillLayoutSettings {
 	// ── Margin Figures ──
 	marginFiguresEnabled: boolean;
 	marginFigureMaxHeight: number;
+	/** Where to show figures in edit/live-preview mode */
+	editFigureDisplayMode: 'margin-only' | 'both' | 'inline-only';
 
 	// ── Margin Code ──
 	marginCodeEnabled: boolean;
@@ -139,6 +141,7 @@ export const DEFAULT_SETTINGS: DistillLayoutSettings = {
 	multiPaneSyncEnabled: false,
 	marginFiguresEnabled: true,
 	marginFigureMaxHeight: 200,
+	editFigureDisplayMode: 'both',
 	marginCodeEnabled: true,
 	marginCodeMaxLines: 15,
 	marginCommentsEnabled: true,
@@ -158,6 +161,8 @@ export interface HeadingEntry {
 	level: number;
 	element: HTMLElement;
 	top: number;
+	/** Source line number for scroll-to when heading is virtualized. */
+	line?: number;
 }
 
 export interface ParsedFootnote {

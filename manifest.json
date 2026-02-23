@@ -3,7 +3,7 @@
 	"name": "Distill Layout",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Distill.pub-inspired reading layout with scroll-tracking TOC and margin sidenotes.",
+	"description": "Display notes in a Distill.pub-inspired layout with scroll-tracking TOC and margin sidenotes.",
 	"author": "Felix Taschbach",
 	"isDesktopOnly": false
 }

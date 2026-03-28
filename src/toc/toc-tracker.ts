@@ -64,7 +64,6 @@ export class TocTracker {
 		// Recompute top for DOM-present headings in scroll-space (absolute document position).
 		// Offset relative to scroll container + scrollTop = scroll-space position.
 		const containerRect = this.scrollContainer.getBoundingClientRect();
-		const sizer = this.scrollContainer.querySelector('.markdown-preview-sizer') as HTMLElement;
 		for (const h of this.headings) {
 			if (h.element.isConnected && h.element.matches('h1,h2,h3,h4,h5,h6')) {
 				h.top = h.element.getBoundingClientRect().top - containerRect.top + scrollTop;

@@ -216,7 +216,7 @@ export default class DistillLayoutPlugin extends Plugin {
 		// Commands
 		this.addCommand({
 			id: 'toggle-toc',
-			name: 'Toggle TOC',
+			name: 'Toggle table of contents',
 			callback: () => {
 				this.settings.tocEnabled = !this.settings.tocEnabled;
 				void this.saveSettings();

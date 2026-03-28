@@ -1090,8 +1090,8 @@ export class SidenoteRenderer {
 			// Detect whether this is a numbered sidenote or a margin note
 			const numberSpan = note.querySelector('.distill-sidenote-number');
 			const isNumbered = !!numberSpan;
-			const num = isNumbered ? parseInt(numberSpan!.textContent || '0', 10) : 0;
-			const type = isNumbered ? 'sidenote' : 'marginnote';
+			const num = numberSpan ? parseInt(numberSpan.textContent || '0', 10) : 0;
+			const type: 'sidenote' | 'marginnote' = isNumbered ? 'sidenote' : 'marginnote';
 
 			const contentSpan = note.querySelector('.distill-sidenote-content');
 			const fakeFn = {
@@ -1099,7 +1099,7 @@ export class SidenoteRenderer {
 				refElement,
 				content: contentSpan?.textContent ?? '',
 				contentEl: contentSpan ? contentSpan.cloneNode(true) as HTMLElement : undefined,
-				type: type as 'sidenote' | 'marginnote',
+				type,
 				icon: undefined,
 			};
 

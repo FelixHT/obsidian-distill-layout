@@ -34,7 +34,7 @@ export class ReadingTime {
 			.replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, '$2') // wikilinks
 			.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // markdown links
 			.replace(/^#+\s/gm, '')                  // heading markers
-			.replace(/\{\>.*?\}/g, '')               // custom sidenote syntax
+			.replace(/\{>.*?\}/g, '')               // custom sidenote syntax
 			.replace(/\{\?.*?\}/g, '')               // comment syntax
 			.replace(/\[\^[^\]]+\]:?\s?/g, '')       // footnote refs/defs
 			.replace(/[*_~`>#\-|]/g, '');            // remaining markdown chars

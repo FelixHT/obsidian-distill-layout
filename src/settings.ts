@@ -139,16 +139,16 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.addOption('minimal', 'Minimal')
 				.addOption('dark-accent', 'Dark accent')
 				.setValue(this.plugin.settings.stylePreset)
-				.onChange(async v => {
+				.onChange(v => {
 					const preset = PRESETS[v as keyof typeof PRESETS];
 					if (preset) {
 						Object.assign(this.plugin.settings, preset);
 						this.plugin.settings.stylePreset = v as DistillLayoutSettings['stylePreset'];
-						await this.plugin.saveSettings();
-						this.display(); // Re-render settings to reflect new values
+						void this.plugin.saveSettings();
+						this.display();
 					} else {
 						this.plugin.settings.stylePreset = 'custom';
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					}
 				})
 			);
@@ -159,21 +159,21 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 		const tocSection = createCollapsibleSection(containerEl, 'Table of Contents', true);
 
 		new Setting(tocSection)
-			.setName('Enable TOC')
+			.setName('Enable table of contents')
 			.setDesc('Show scroll-tracking table of contents in the left margin.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.tocEnabled)
-				.onChange(async v => { this.plugin.settings.tocEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.tocEnabled = v; this.save(); })
 			);
 
 		new Setting(tocSection)
-			.setName('TOC width')
-			.setDesc('Width of the TOC column in pixels.')
+			.setName('Table of contents width')
+			.setDesc('Width of the table of contents column in pixels.')
 			.addSlider(s => s
 				.setLimits(120, 300, 10)
 				.setValue(this.plugin.settings.tocWidth)
 				.setDynamicTooltip()
-				.onChange(async v => { this.plugin.settings.tocWidth = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.tocWidth = v; this.save(); })
 			);
 
 		new Setting(tocSection)
@@ -183,33 +183,33 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.setLimits(1, 6, 1)
 				.setValue(this.plugin.settings.tocMaxDepth)
 				.setDynamicTooltip()
-				.onChange(async v => { this.plugin.settings.tocMaxDepth = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.tocMaxDepth = v; this.save(); })
 			);
 
 		new Setting(tocSection)
-			.setName('TOC font size')
+			.setName('Table of contents font size')
 			.setDesc('Font size as a percentage.')
 			.addSlider(s => s
 				.setLimits(60, 120, 5)
 				.setValue(this.plugin.settings.tocFontSize)
 				.setDynamicTooltip()
-				.onChange(async v => { this.plugin.settings.tocFontSize = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.tocFontSize = v; this.save(); })
 			);
 
 		new Setting(tocSection)
 			.setName('Reading progress bar')
-			.setDesc('Show a thin progress bar above the TOC indicating scroll position.')
+			.setDesc('Show a thin progress bar above the table of contents indicating scroll position.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.progressBarEnabled)
-				.onChange(async v => { this.plugin.settings.progressBarEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.progressBarEnabled = v; this.save(); })
 			);
 
 		new Setting(tocSection)
 			.setName('Estimated reading time')
-			.setDesc('Show word count and estimated reading time above the TOC.')
+			.setDesc('Show word count and estimated reading time below the table of contents.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.readingTimeEnabled)
-				.onChange(async v => { this.plugin.settings.readingTimeEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.readingTimeEnabled = v; this.save(); })
 			);
 
 		new Setting(tocSection)
@@ -219,15 +219,15 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.setLimits(100, 400, 10)
 				.setValue(this.plugin.settings.wordsPerMinute)
 				.setDynamicTooltip()
-				.onChange(async v => { this.plugin.settings.wordsPerMinute = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.wordsPerMinute = v; this.save(); })
 			);
 
 		new Setting(tocSection)
 			.setName('Section previews on hover')
-			.setDesc('Show a tooltip with the first few characters of each section when hovering TOC items.')
+			.setDesc('Show a tooltip with the first few characters of each section when hovering table of contents items.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.tocPreviewsEnabled)
-				.onChange(async v => { this.plugin.settings.tocPreviewsEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.tocPreviewsEnabled = v; this.save(); })
 			);
 
 		new Setting(tocSection)
@@ -237,7 +237,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.setLimits(60, 300, 10)
 				.setValue(this.plugin.settings.tocPreviewMaxChars)
 				.setDynamicTooltip()
-				.onChange(async v => { this.plugin.settings.tocPreviewMaxChars = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.tocPreviewMaxChars = v; this.save(); })
 			);
 
 		// ══════════════════════════════════════════
@@ -250,7 +250,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Show footnotes as margin sidenotes in the right column.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.sidenotesEnabled)
-				.onChange(async v => { this.plugin.settings.sidenotesEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.sidenotesEnabled = v; this.save(); })
 			);
 
 		new Setting(sidenoteSection)
@@ -260,7 +260,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.setLimits(150, 350, 10)
 				.setValue(this.plugin.settings.sidenoteWidth)
 				.setDynamicTooltip()
-				.onChange(async v => { this.plugin.settings.sidenoteWidth = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.sidenoteWidth = v; this.save(); })
 			);
 
 		new Setting(sidenoteSection)
@@ -270,7 +270,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.setLimits(60, 120, 5)
 				.setValue(this.plugin.settings.sidenoteFontSize)
 				.setDynamicTooltip()
-				.onChange(async v => { this.plugin.settings.sidenoteFontSize = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.sidenoteFontSize = v; this.save(); })
 			);
 
 		new Setting(sidenoteSection)
@@ -278,7 +278,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Hide the original footnotes section at the bottom of the document.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.hideFootnotesSection)
-				.onChange(async v => { this.plugin.settings.hideFootnotesSection = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.hideFootnotesSection = v; this.save(); })
 			);
 
 		new Setting(sidenoteSection)
@@ -286,7 +286,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Enable inline sidenote syntax: {>your sidenote text}.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.customSidenoteSyntax)
-				.onChange(async v => { this.plugin.settings.customSidenoteSyntax = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.customSidenoteSyntax = v; this.save(); })
 			);
 
 		new Setting(sidenoteSection)
@@ -294,7 +294,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Show superscript numbers on footnote sidenotes. Margin notes ({>text}) are always unnumbered.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.showSidenoteNumbers)
-				.onChange(async v => { this.plugin.settings.showSidenoteNumbers = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.showSidenoteNumbers = v; this.save(); })
 			);
 
 		new Setting(sidenoteSection)
@@ -302,7 +302,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Enable icon prefix syntax: {>!warning: text}. Supported: info, warning, tip, citation, question, note, example.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.sidenoteIconsEnabled)
-				.onChange(async v => { this.plugin.settings.sidenoteIconsEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.sidenoteIconsEnabled = v; this.save(); })
 			);
 
 		new Setting(sidenoteSection)
@@ -310,7 +310,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Truncate long sidenotes with a fade-out and expand button.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.collapsibleSidenotes)
-				.onChange(async v => { this.plugin.settings.collapsibleSidenotes = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.collapsibleSidenotes = v; this.save(); })
 			);
 
 		new Setting(sidenoteSection)
@@ -320,7 +320,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.setLimits(50, 300, 10)
 				.setValue(this.plugin.settings.sidenoteCollapseHeight)
 				.setDynamicTooltip()
-				.onChange(async v => { this.plugin.settings.sidenoteCollapseHeight = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.sidenoteCollapseHeight = v; this.save(); })
 			);
 
 		new Setting(sidenoteSection)
@@ -330,9 +330,9 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.addOption('always', 'Always visible')
 				.addOption('hover', 'Show on hover')
 				.setValue(this.plugin.settings.sidenoteDisplayMode)
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.sidenoteDisplayMode = v as 'always' | 'hover';
-					await this.save();
+					this.save();
 				})
 			);
 
@@ -344,9 +344,9 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.addOption('circled', 'Circled')
 				.addOption('pill', 'Pill')
 				.setValue(this.plugin.settings.numberBadgeStyle)
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.numberBadgeStyle = v as 'superscript' | 'circled' | 'pill';
-					await this.save();
+					this.save();
 				})
 			);
 
@@ -355,7 +355,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Sidenotes and margin items animate in when scrolling into view.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.sidenoteAnimations)
-				.onChange(async v => { this.plugin.settings.sidenoteAnimations = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.sidenoteAnimations = v; this.save(); })
 			);
 
 		new Setting(sidenoteSection)
@@ -365,9 +365,9 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.addOption('fade', 'Fade')
 				.addOption('slide', 'Slide')
 				.setValue(this.plugin.settings.sidenoteAnimationStyle)
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.sidenoteAnimationStyle = v as 'fade' | 'slide';
-					await this.save();
+					this.save();
 				})
 			);
 
@@ -376,7 +376,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Click a sidenote to highlight its source paragraph.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.annotationHighlight)
-				.onChange(async v => { this.plugin.settings.annotationHighlight = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.annotationHighlight = v; this.save(); })
 			);
 
 		new Setting(sidenoteSection)
@@ -384,7 +384,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Make wikilinks inside sidenotes clickable to open the linked note.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.sidenoteLinksEnabled)
-				.onChange(async v => { this.plugin.settings.sidenoteLinksEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.sidenoteLinksEnabled = v; this.save(); })
 			);
 
 		new Setting(sidenoteSection)
@@ -392,7 +392,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Show an indicator when a linked note in a sidenote links back to the current note.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.sidenoteBacklinks)
-				.onChange(async v => { this.plugin.settings.sidenoteBacklinks = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.sidenoteBacklinks = v; this.save(); })
 			);
 
 		new Setting(sidenoteSection)
@@ -401,9 +401,9 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.addText(t => t
 				.setPlaceholder('e.g. Georgia, serif')
 				.setValue(this.plugin.settings.sidenoteFontFamily)
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.sidenoteFontFamily = v;
-					await this.save();
+					this.save();
 				})
 			);
 
@@ -417,7 +417,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Render {>fig:![[img]]|caption} as images in the margin.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.marginFiguresEnabled)
-				.onChange(async v => { this.plugin.settings.marginFiguresEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.marginFiguresEnabled = v; this.save(); })
 			);
 
 		new Setting(marginSection)
@@ -427,7 +427,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.setLimits(100, 400, 10)
 				.setValue(this.plugin.settings.marginFigureMaxHeight)
 				.setDynamicTooltip()
-				.onChange(async v => { this.plugin.settings.marginFigureMaxHeight = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.marginFigureMaxHeight = v; this.save(); })
 			);
 
 		new Setting(marginSection)
@@ -438,9 +438,9 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.addOption('both', 'Both inline and margin')
 				.addOption('inline-only', 'Inline only')
 				.setValue(this.plugin.settings.editFigureDisplayMode)
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.editFigureDisplayMode = v as 'margin-only' | 'both' | 'inline-only';
-					await this.save();
+					this.save();
 				})
 			);
 
@@ -449,7 +449,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Move ```margin-lang code blocks to the margin column.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.marginCodeEnabled)
-				.onChange(async v => { this.plugin.settings.marginCodeEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.marginCodeEnabled = v; this.save(); })
 			);
 
 		new Setting(marginSection)
@@ -459,7 +459,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.setLimits(5, 30, 1)
 				.setValue(this.plugin.settings.marginCodeMaxLines)
 				.setDynamicTooltip()
-				.onChange(async v => { this.plugin.settings.marginCodeMaxLines = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.marginCodeMaxLines = v; this.save(); })
 			);
 
 		new Setting(marginSection)
@@ -467,7 +467,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Render {?text} or {?author|text} as comments in the margin.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.marginCommentsEnabled)
-				.onChange(async v => { this.plugin.settings.marginCommentsEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.marginCommentsEnabled = v; this.save(); })
 			);
 
 		// ══════════════════════════════════════════
@@ -480,18 +480,18 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Experimental. Parse [@citekey] syntax and show formatted references in the margin.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.citationsEnabled)
-				.onChange(async v => { this.plugin.settings.citationsEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.citationsEnabled = v; this.save(); })
 			);
 
 		new Setting(citationSection)
-			.setName('BibTeX file path')
+			.setName('Bibliography file path')
 			.setDesc('Path to a .bib file in the vault (e.g. references.bib).')
 			.addText(t => t
 				.setPlaceholder('references.bib')
 				.setValue(this.plugin.settings.citationBibPath)
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.citationBibPath = v;
-					await this.save();
+					this.save();
 				})
 			);
 
@@ -502,9 +502,9 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.addOption('author-year', 'Author-year')
 				.addOption('numbered', 'Numbered')
 				.setValue(this.plugin.settings.citationStyle)
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.citationStyle = v as 'author-year' | 'numbered';
-					await this.save();
+					this.save();
 				})
 			);
 
@@ -518,15 +518,15 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Experimental. Render ```dataview-margin code blocks in the margin (requires Dataview plugin).')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.dataviewMarginEnabled)
-				.onChange(async v => { this.plugin.settings.dataviewMarginEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.dataviewMarginEnabled = v; this.save(); })
 			);
 
 		new Setting(integrationsSection)
-			.setName('Multi-pane TOC sync')
-			.setDesc('Experimental. Sync TOC highlighting across panes showing the same note.')
+			.setName('Multi-pane table of contents sync')
+			.setDesc('Experimental. Sync table of contents highlighting across panes showing the same note.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.multiPaneSyncEnabled)
-				.onChange(async v => { this.plugin.settings.multiPaneSyncEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.multiPaneSyncEnabled = v; this.save(); })
 			);
 
 		// ══════════════════════════════════════════
@@ -535,41 +535,41 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 		const colorSection = createCollapsibleSection(containerEl, 'Colors');
 
 		new Setting(colorSection)
-			.setName('TOC text color')
-			.setDesc('Color for TOC link text. Clear to use theme default.')
+			.setName('Table of contents text color')
+			.setDesc('Color for table of contents link text. Clear to use theme default.')
 			.addColorPicker(cp => cp
 				.setValue(this.plugin.settings.tocColor || getThemeColor('--text-muted', '#888888'))
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.tocColor = v;
-					await this.save();
+					this.save();
 				})
 			)
 			.addExtraButton(b => b
 				.setIcon('reset')
 				.setTooltip('Reset to theme default')
-				.onClick(async () => {
+				.onClick(() => {
 					this.plugin.settings.tocColor = '';
-					await this.save();
+					this.save();
 					this.display();
 				})
 			);
 
 		new Setting(colorSection)
-			.setName('TOC highlight color')
-			.setDesc('Color for the active TOC item border and text. Clear to use theme default.')
+			.setName('Table of contents highlight color')
+			.setDesc('Color for the active table of contents item border and text. Clear to use theme default.')
 			.addColorPicker(cp => cp
 				.setValue(this.plugin.settings.tocHighlightColor || getThemeColor('--text-accent', '#7f6df2'))
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.tocHighlightColor = v;
-					await this.save();
+					this.save();
 				})
 			)
 			.addExtraButton(b => b
 				.setIcon('reset')
 				.setTooltip('Reset to theme default')
-				.onClick(async () => {
+				.onClick(() => {
 					this.plugin.settings.tocHighlightColor = '';
-					await this.save();
+					this.save();
 					this.display();
 				})
 			);
@@ -579,17 +579,17 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Color for sidenote numbers, badges, in-text references, and markers. Clear to use theme default.')
 			.addColorPicker(cp => cp
 				.setValue(this.plugin.settings.sidenoteNumberColor || getThemeColor('--text-accent', '#7f6df2'))
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.sidenoteNumberColor = v;
-					await this.save();
+					this.save();
 				})
 			)
 			.addExtraButton(b => b
 				.setIcon('reset')
 				.setTooltip('Reset to theme default')
-				.onClick(async () => {
+				.onClick(() => {
 					this.plugin.settings.sidenoteNumberColor = '';
-					await this.save();
+					this.save();
 					this.display();
 				})
 			);
@@ -599,17 +599,17 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Color for sidenote body text. Clear to use theme default.')
 			.addColorPicker(cp => cp
 				.setValue(this.plugin.settings.sidenoteTextColor || getThemeColor('--text-muted', '#888888'))
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.sidenoteTextColor = v;
-					await this.save();
+					this.save();
 				})
 			)
 			.addExtraButton(b => b
 				.setIcon('reset')
 				.setTooltip('Reset to theme default')
-				.onClick(async () => {
+				.onClick(() => {
 					this.plugin.settings.sidenoteTextColor = '';
-					await this.save();
+					this.save();
 					this.display();
 				})
 			);
@@ -619,17 +619,17 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Background color for sidenotes. Clear to use theme default.')
 			.addColorPicker(cp => cp
 				.setValue(this.plugin.settings.sidenoteBackgroundColor || getThemeColor('--background-secondary', '#f5f5f5'))
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.sidenoteBackgroundColor = v;
-					await this.save();
+					this.save();
 				})
 			)
 			.addExtraButton(b => b
 				.setIcon('reset')
 				.setTooltip('Reset to theme default')
-				.onClick(async () => {
+				.onClick(() => {
 					this.plugin.settings.sidenoteBackgroundColor = '';
-					await this.save();
+					this.save();
 					this.display();
 				})
 			);
@@ -639,17 +639,17 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Border color for sidenotes. Clear to use theme default.')
 			.addColorPicker(cp => cp
 				.setValue(this.plugin.settings.sidenoteBorderColor || getThemeColor('--background-modifier-border', '#ddd'))
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.sidenoteBorderColor = v;
-					await this.save();
+					this.save();
 				})
 			)
 			.addExtraButton(b => b
 				.setIcon('reset')
 				.setTooltip('Reset to theme default')
-				.onClick(async () => {
+				.onClick(() => {
 					this.plugin.settings.sidenoteBorderColor = '';
-					await this.save();
+					this.save();
 					this.display();
 				})
 			);
@@ -659,17 +659,17 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Color for the reading progress bar. Clear to use theme accent.')
 			.addColorPicker(cp => cp
 				.setValue(this.plugin.settings.progressBarColor || getThemeColor('--text-accent', '#7f6df2'))
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.progressBarColor = v;
-					await this.save();
+					this.save();
 				})
 			)
 			.addExtraButton(b => b
 				.setIcon('reset')
 				.setTooltip('Reset to theme default')
-				.onClick(async () => {
+				.onClick(() => {
 					this.plugin.settings.progressBarColor = '';
-					await this.save();
+					this.save();
 					this.display();
 				})
 			);
@@ -679,17 +679,17 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Background color for margin comments. Clear to use default.')
 			.addColorPicker(cp => cp
 				.setValue(this.plugin.settings.marginCommentColor || '#fef3cd')
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.marginCommentColor = v;
-					await this.save();
+					this.save();
 				})
 			)
 			.addExtraButton(b => b
 				.setIcon('reset')
 				.setTooltip('Reset to default')
-				.onClick(async () => {
+				.onClick(() => {
 					this.plugin.settings.marginCommentColor = '';
-					await this.save();
+					this.save();
 					this.display();
 				})
 			);
@@ -701,24 +701,24 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 
 		new Setting(layoutSection)
 			.setName('Column layout')
-			.setDesc('Default: TOC left, sidenotes right. Swapped: reversed. Alternating: sidenotes on both sides (no TOC).')
+			.setDesc('Default: table of contents left, sidenotes right. Swapped: reversed. Alternating: sidenotes on both sides.')
 			.addDropdown(d => d
-				.addOption('default', 'Default (TOC left)')
-				.addOption('swapped', 'Swapped (TOC right)')
+				.addOption('default', 'Default (left)')
+				.addOption('swapped', 'Swapped (right)')
 				.addOption('alternating', 'Alternating (both sides)')
 				.setValue(this.plugin.settings.columnLayout)
-				.onChange(async v => {
+				.onChange(v => {
 					this.plugin.settings.columnLayout = v as 'default' | 'swapped' | 'alternating';
-					await this.save();
+					this.save();
 				})
 			);
 
 		new Setting(layoutSection)
 			.setName('Enable in edit mode')
-			.setDesc('Show TOC and sidenotes in source and live preview mode.')
+			.setDesc('Show table of contents and sidenotes in source and live preview mode.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.enableInEditMode)
-				.onChange(async v => { this.plugin.settings.enableInEditMode = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.enableInEditMode = v; this.save(); })
 			);
 
 		new Setting(layoutSection)
@@ -728,7 +728,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.setLimits(8, 48, 4)
 				.setValue(this.plugin.settings.gutterWidth)
 				.setDynamicTooltip()
-				.onChange(async v => { this.plugin.settings.gutterWidth = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.gutterWidth = v; this.save(); })
 			);
 
 		new Setting(layoutSection)
@@ -738,7 +738,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.setLimits(600, 1400, 50)
 				.setValue(this.plugin.settings.collapseWidth)
 				.setDynamicTooltip()
-				.onChange(async v => { this.plugin.settings.collapseWidth = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.collapseWidth = v; this.save(); })
 			);
 
 		// ══════════════════════════════════════════
@@ -748,10 +748,10 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 
 		new Setting(behaviorSection)
 			.setName('Smooth scroll')
-			.setDesc('Use smooth scrolling when clicking TOC items.')
+			.setDesc('Use smooth scrolling when clicking table of contents items.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.smoothScroll)
-				.onChange(async v => { this.plugin.settings.smoothScroll = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.smoothScroll = v; this.save(); })
 			);
 
 		new Setting(behaviorSection)
@@ -759,7 +759,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Click sidenote number to scroll to its reference, and vice versa.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.crossRefClickEnabled)
-				.onChange(async v => { this.plugin.settings.crossRefClickEnabled = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.crossRefClickEnabled = v; this.save(); })
 			);
 
 		new Setting(behaviorSection)
@@ -767,7 +767,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Hover over a sidenote to highlight its reference, and vice versa.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.hoverHighlight)
-				.onChange(async v => { this.plugin.settings.hoverHighlight = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.hoverHighlight = v; this.save(); })
 			);
 
 		new Setting(behaviorSection)
@@ -775,14 +775,14 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setDesc('Hide Obsidian\'s native footnote hover popover (content is already shown as sidenotes).')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.suppressFootnoteHover)
-				.onChange(async v => { this.plugin.settings.suppressFootnoteHover = v; await this.save(); })
+				.onChange(v => { this.plugin.settings.suppressFootnoteHover = v; this.save(); })
 			);
 
 	}
 
 	private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-	private async save(): Promise<void> {
+	private save(): void {
 		// Any manual change switches back to 'custom' preset
 		if (this.plugin.settings.stylePreset !== 'custom') {
 			this.plugin.settings.stylePreset = 'custom';

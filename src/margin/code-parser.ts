@@ -34,7 +34,7 @@ export class CodeParser {
 			const clonedPre = pre.cloneNode(true) as HTMLElement;
 
 			// Hide the original in content
-			(pre as HTMLElement).style.display = 'none';
+			(pre as HTMLElement).classList.add('distill-hidden');
 			(pre as HTMLElement).dataset.distillMarginCode = 'true';
 
 			results.push({

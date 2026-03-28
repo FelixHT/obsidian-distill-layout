@@ -1,3 +1,4 @@
+import type { EditorView } from '@codemirror/view';
 import type { DistillLayoutSettings } from '../types';
 import type { EditParsedFigure } from './edit-figure-parser';
 
@@ -16,7 +17,7 @@ export class EditFigureRenderer {
 	render(
 		track: HTMLElement,
 		figures: EditParsedFigure[],
-		cmView: import('@codemirror/view').EditorView,
+		cmView: EditorView,
 		contentOffset = 0
 	): void {
 		this.clear();
@@ -39,7 +40,7 @@ export class EditFigureRenderer {
 			const img = document.createElement('img');
 			img.src = fig.imgSrc;
 			img.alt = fig.caption || '';
-			img.style.maxHeight = `${this.settings.marginFigureMaxHeight}px`;
+			img.style.setProperty('--distill-figure-max-height', `${this.settings.marginFigureMaxHeight}px`);
 			el.appendChild(img);
 
 			if (fig.caption) {
@@ -48,7 +49,7 @@ export class EditFigureRenderer {
 				el.appendChild(captionEl);
 			}
 
-			el.style.position = 'absolute';
+			el.classList.add('distill-position-absolute');
 			el.style.top = `${top}px`;
 			el.dataset.refTop = `${top}px`;
 			el.dataset.refOffset = String(fig.refOffset);

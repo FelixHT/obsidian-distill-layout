@@ -26,24 +26,23 @@ export class FigureParser {
 		const results: ParsedFigure[] = [];
 
 		// Phase A: recover existing markers from a previous parse
-		const existingMarkers = container.querySelectorAll(
+		const existingMarkers = container.querySelectorAll<HTMLElement>(
 			'span.distill-figure-marker[data-figure-src]'
 		);
 		for (const marker of Array.from(existingMarkers)) {
-			const htmlMarker = marker as HTMLElement;
-			const src = htmlMarker.dataset.figureSrc || '';
-			const caption = htmlMarker.dataset.figureCaption || '';
-			const id = htmlMarker.dataset.figureId || '';
+			const src = marker.dataset.figureSrc || '';
+			const caption = marker.dataset.figureCaption || '';
+			const id = marker.dataset.figureId || '';
 			if (src && id) {
-				results.push({ id, refElement: htmlMarker, imgSrc: src, caption });
+				results.push({ id, refElement: marker, imgSrc: src, caption });
 			}
 		}
 
 		// Phase B: find Obsidian embed elements preceded by {>fig: text
-		const embeds = container.querySelectorAll('.internal-embed');
+		const embeds = container.querySelectorAll<HTMLElement>('.internal-embed');
 		for (const embed of Array.from(embeds)) {
 			// Already processed?
-			if ((embed as HTMLElement).dataset.distillFigureParsed) continue;
+			if (embed.dataset.distillFigureParsed) continue;
 
 			// Check previous text node for {>fig: prefix
 			const prevText = this.findAdjacentText(embed, 'before');
@@ -62,7 +61,7 @@ export class FigureParser {
 			const caption = suffixMatch[1]?.trim() || '';
 
 			// Extract image source from the embed
-			const imgSrc = this.resolveEmbedSrc(embed as HTMLElement);
+			const imgSrc = this.resolveEmbedSrc(embed);
 			if (!imgSrc) continue;
 
 			const imgName = embed.getAttribute('src') || '';
@@ -74,8 +73,8 @@ export class FigureParser {
 			marker.dataset.figureSrc = imgSrc;
 			marker.dataset.figureCaption = caption;
 			marker.dataset.figureId = id;
-			(embed as HTMLElement).dataset.distillFigureParsed = 'true';
-			(embed as HTMLElement).style.display = 'none';  // resilient to CSS specificity issues
+			embed.dataset.distillFigureParsed = 'true';
+			embed.classList.add('distill-hidden');
 
 			// Clean up: remove {>fig: (with optional trailing whitespace) from preceding text
 			const prevContent = prevText.textContent || '';
@@ -119,7 +118,7 @@ export class FigureParser {
 			let currentText = node.textContent || '';
 
 			for (const match of matches.reverse()) {
-				const fullMatch = match[0]!;
+				const fullMatch = match[0];
 				const imgName = match[1]!.trim();
 				const caption = (match[2] ?? '').trim();
 				const index = currentText.lastIndexOf(fullMatch);

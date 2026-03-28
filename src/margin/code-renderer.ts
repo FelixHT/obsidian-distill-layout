@@ -45,10 +45,9 @@ export class CodeRenderer {
 
 			// Apply max lines via max-height
 			const lineHeight = 1.4; // em
-			const fontSize = this.settings.sidenoteFontSize / 100; // relative
 			const maxLines = this.settings.marginCodeMaxLines;
-			wrapper.style.maxHeight = `${maxLines * lineHeight * fontSize}em`;
-			wrapper.style.overflow = 'auto';
+			wrapper.style.setProperty('--distill-code-max-height', `${maxLines * lineHeight}em`);
+			wrapper.classList.add('distill-overflow-auto');
 
 			wrapper.appendChild(parsed.codeElement);
 
@@ -80,14 +79,14 @@ export class CodeRenderer {
 
 		// Restore hidden source elements via tracked references (works even if virtualized)
 		for (const src of this.hiddenSources) {
-			src.style.display = '';
+			src.classList.remove('distill-hidden');
 			src.removeAttribute('data-distill-margin-code');
 		}
 		this.hiddenSources = [];
 
 		// Best-effort DOM cleanup for any we missed
 		document.querySelectorAll('[data-distill-margin-code]').forEach(el => {
-			(el as HTMLElement).style.display = '';
+			(el as HTMLElement).classList.remove('distill-hidden');
 			el.removeAttribute('data-distill-margin-code');
 		});
 	}

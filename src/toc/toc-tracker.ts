@@ -46,6 +46,13 @@ export class TocTracker {
 		this.headings = headings;
 	}
 
+	/**
+	 * Re-evaluate the active heading after heading entries are updated.
+	 */
+	refresh(): void {
+		this.update();
+	}
+
 	private update(): void {
 		if (!this.scrollContainer || this.headings.length === 0) return;
 
@@ -54,14 +61,13 @@ export class TocTracker {
 		// Activation threshold: 20% into the viewport
 		const threshold = scrollTop + viewportHeight * 0.2;
 
-		// Recompute top for DOM-present headings to stay accurate
+		// Recompute top for DOM-present headings in scroll-space (absolute document position).
+		// Offset relative to scroll container + scrollTop = scroll-space position.
+		const containerRect = this.scrollContainer.getBoundingClientRect();
 		const sizer = this.scrollContainer.querySelector('.markdown-preview-sizer') as HTMLElement;
-		if (sizer) {
-			const sizerRect = sizer.getBoundingClientRect();
-			for (const h of this.headings) {
-				if (h.element !== sizer && h.element.isConnected) {
-					h.top = h.element.getBoundingClientRect().top - sizerRect.top;
-				}
+		for (const h of this.headings) {
+			if (h.element.isConnected && h.element.matches('h1,h2,h3,h4,h5,h6')) {
+				h.top = h.element.getBoundingClientRect().top - containerRect.top + scrollTop;
 			}
 		}
 

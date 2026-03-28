@@ -35,12 +35,24 @@ export class TocTooltip {
 				if (!preview) return;
 
 				this.tooltipEl.textContent = preview;
+				// Make visible first so we can measure its dimensions
 				this.tooltipEl.classList.add('distill-toc-tooltip-visible');
 
-				// Position near the hovered link using fixed positioning
 				const rect = (link as HTMLElement).getBoundingClientRect();
-				this.tooltipEl.style.top = `${rect.top}px`;
-				this.tooltipEl.style.left = `${rect.right + 8}px`;
+				const tipRect = this.tooltipEl.getBoundingClientRect();
+
+				// Try right side first, fall back to left if it overflows
+				let left = rect.right + 8;
+				if (left + tipRect.width > window.innerWidth) {
+					left = rect.left - tipRect.width - 8;
+				}
+				left = Math.max(0, left);
+
+				// Clamp vertical position to viewport
+				const top = Math.min(rect.top, window.innerHeight - tipRect.height - 8);
+
+				this.tooltipEl.style.top = `${Math.max(0, top)}px`;
+				this.tooltipEl.style.left = `${left}px`;
 			};
 
 			const leave = () => {

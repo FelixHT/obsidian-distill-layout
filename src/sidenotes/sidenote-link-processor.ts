@@ -1,4 +1,9 @@
-import { App } from 'obsidian';
+import { App, TFile } from 'obsidian';
+
+/** Obsidian internal: MetadataCache exposes backlinks but it's not in public types. */
+interface MetadataCacheWithBacklinks {
+	getBacklinksForFile?: (file: TFile) => { data?: Map<string, unknown> } | undefined;
+}
 
 /**
  * Processes wikilinks inside rendered sidenotes, making them clickable
@@ -29,14 +34,14 @@ export class SidenoteLinkProcessor {
 			anchor.addEventListener('click', (e) => {
 				e.preventDefault();
 				e.stopPropagation();
-				this.app.workspace.openLinkText(href, sourcePath);
+				void this.app.workspace.openLinkText(href, sourcePath);
 			});
 
 			// Backlink indicator
 			if (showBacklinks) {
 				const linkedFile = this.app.metadataCache.getFirstLinkpathDest(href, sourcePath);
 				if (linkedFile) {
-					const backlinks = (this.app.metadataCache as any).getBacklinksForFile?.(linkedFile);
+					const backlinks = (this.app.metadataCache as unknown as MetadataCacheWithBacklinks).getBacklinksForFile?.(linkedFile);
 					if (backlinks?.data && backlinks.data.has(sourcePath)) {
 						const indicator = document.createElement('span');
 						indicator.className = 'distill-backlink-indicator';

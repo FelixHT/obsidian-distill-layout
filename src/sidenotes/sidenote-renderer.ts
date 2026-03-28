@@ -1,4 +1,4 @@
-import type { ParsedFootnote, DistillLayoutSettings, MarginItem } from '../types';
+import type { ParsedFootnote, DistillLayoutSettings } from '../types';
 import type { MarginItemRegistry } from '../margin/margin-item-registry';
 import type { EditParsedFootnote } from './edit-footnote-parser';
 import { MarkdownRenderer, Component } from 'obsidian';
@@ -22,8 +22,7 @@ export class SidenoteRenderer {
 	private refMap = new Map<HTMLElement, HTMLElement>();
 	/** Cleanup functions for event listeners added to elements we don't own (refs). */
 	private eventCleanup: Array<() => void> = [];
-	/** Active hover preview timers for cleanup. */
-	private hoverTimers: Array<ReturnType<typeof setTimeout>> = [];
+	/** @deprecated — hover timers are now cleaned up per-note via eventCleanup closures. */
 	/** Running index for alternating mode — persists across incremental render() calls. */
 	private alternatingIndex = 0;
 	/** Currently highlighted element for annotation highlighting. */
@@ -146,7 +145,7 @@ export class SidenoteRenderer {
 				const comp = new Component();
 				comp.load();
 				this.preRenderComponents.push(comp);
-				MarkdownRenderer.render(this.app, item.content, wrapper, '', comp);
+				void MarkdownRenderer.render(this.app, item.content, wrapper, '', comp);
 				if (isNumbered) contentSpan.appendChild(document.createTextNode(' '));
 				while (wrapper.firstChild) {
 					contentSpan.appendChild(wrapper.firstChild);
@@ -238,8 +237,6 @@ export class SidenoteRenderer {
 	 * whose section has become visible in the DOM.
 	 */
 	private upgradePreCreated(note: HTMLElement, fn: ParsedFootnote, sizerEl: HTMLElement): void {
-		const oldRef = this.refMap.get(note);
-
 		// Update refMap with real ref element
 		this.refMap.set(note, fn.refElement);
 		fn.refElement.dataset.sidenoteId = fn.id;
@@ -286,9 +283,9 @@ export class SidenoteRenderer {
 		}
 
 		// Prevent native footnote navigation
-		const refAnchor = fn.refElement.tagName === 'A'
-			? fn.refElement as HTMLAnchorElement
-			: fn.refElement.querySelector('a') as HTMLAnchorElement | null;
+		const refAnchor = fn.refElement instanceof HTMLAnchorElement
+			? fn.refElement
+			: fn.refElement.querySelector<HTMLAnchorElement>('a');
 		if (refAnchor) {
 			const preventNav = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
 			refAnchor.addEventListener('click', preventNav, true);
@@ -318,8 +315,13 @@ export class SidenoteRenderer {
 
 		// Insert inline fallback after the real ref element
 		const inline = this.createInlineFallback(fn, num, isNumbered);
+		inline.dataset.sidenoteId = fn.id;
 		fn.refElement.after(inline);
 		this.inlineNotes.push(inline);
+
+		// Renumber all sidenotes after upgrade — late-arriving sections may
+		// shift the numbering of previously rendered sidenotes.
+		this.renumber(sizerEl);
 	}
 
 	/**
@@ -366,9 +368,9 @@ export class SidenoteRenderer {
 
 			if (!item.isPreCreated && item.refEl) {
 				item.refEl.dataset.distillSidenoteNum = `${counter}`;
-				const anchor = item.refEl.tagName === 'A'
-					? item.refEl as HTMLAnchorElement
-					: item.refEl.querySelector('a') as HTMLAnchorElement | null;
+				const anchor = item.refEl instanceof HTMLAnchorElement
+					? item.refEl
+					: item.refEl.querySelector<HTMLAnchorElement>('a');
 				if (anchor?.classList.contains('distill-ref-number')) {
 					anchor.textContent = `${counter}`;
 				}
@@ -431,9 +433,9 @@ export class SidenoteRenderer {
 			// Obsidian's native scroll-to-anchor (which fires layout-change
 			// and tears down sidenotes). We use a handler instead of removing
 			// href so that CSS attribute selectors still match on re-parse.
-			const refAnchor = fn.refElement.tagName === 'A'
-				? fn.refElement as HTMLAnchorElement
-				: fn.refElement.querySelector('a') as HTMLAnchorElement | null;
+			const refAnchor = fn.refElement instanceof HTMLAnchorElement
+				? fn.refElement
+				: fn.refElement.querySelector<HTMLAnchorElement>('a');
 			if (refAnchor) {
 				const preventNav = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
 				refAnchor.addEventListener('click', preventNav, true); // capture phase
@@ -570,6 +572,7 @@ export class SidenoteRenderer {
 
 			// --- Inline fallback for narrow mode ---
 			const inline = this.createInlineFallback(fn, num, isNumbered);
+			inline.dataset.sidenoteId = fn.id;
 			fn.refElement.after(inline);
 			this.inlineNotes.push(inline);
 		}
@@ -613,8 +616,8 @@ export class SidenoteRenderer {
 			const previewView = sizerEl.closest('.markdown-preview-view') as HTMLElement;
 			if (previewView) {
 				const footnotesSection = previewView.querySelector('section.footnotes') as HTMLElement;
-				if (footnotesSection && footnotesSection.style.display !== 'none') {
-					footnotesSection.style.display = 'none';
+				if (footnotesSection && !footnotesSection.classList.contains('distill-hidden')) {
+					footnotesSection.classList.add('distill-hidden');
 					this.hiddenFootnoteSections.push(footnotesSection);
 				}
 			}
@@ -759,9 +762,9 @@ export class SidenoteRenderer {
 
 		// Replace the <a> text with the plugin's number so the ref
 		// stays visible (Bug 4 fix). Store original text for cleanup.
-		const anchor = refEl.tagName === 'A'
-			? refEl as HTMLAnchorElement
-			: refEl.querySelector('a') as HTMLAnchorElement | null;
+		const anchor = refEl instanceof HTMLAnchorElement
+			? refEl
+			: refEl.querySelector<HTMLAnchorElement>('a');
 		if (anchor) {
 			anchor.dataset.distillOriginalText = anchor.textContent ?? '';
 			anchor.textContent = `${num}`;
@@ -864,21 +867,14 @@ export class SidenoteRenderer {
 			note.appendChild(inner);
 
 			note.classList.add('distill-sidenote-collapsed');
-			inner.style.maxHeight = `${threshold}px`;
+			inner.style.setProperty('--distill-collapse-height', `${threshold}px`);
 
 			const btn = document.createElement('button');
 			btn.className = 'distill-sidenote-expand';
 			btn.textContent = 'Show more';
 			btn.addEventListener('click', () => {
-				const isCollapsed = note.classList.contains('distill-sidenote-collapsed');
-				note.classList.toggle('distill-sidenote-collapsed', !isCollapsed);
-				if (isCollapsed) {
-					inner.style.maxHeight = '';
-					btn.textContent = 'Show less';
-				} else {
-					inner.style.maxHeight = `${threshold}px`;
-					btn.textContent = 'Show more';
-				}
+				const isCollapsed = note.classList.toggle('distill-sidenote-collapsed');
+				btn.textContent = isCollapsed ? 'Show more' : 'Show less';
 				// Re-resolve collisions via registry or local
 				if (this.registry) {
 					this.registry.resolveAll();
@@ -899,6 +895,9 @@ export class SidenoteRenderer {
 	/** 2b: Hide sidenotes until ref is hovered (hover preview mode). */
 	private applyHoverPreviewMode(): void {
 		for (const note of this.sidenotes) {
+			// Guard: skip notes that already have hover handlers set up
+			if (note.dataset.distillHoverSetup === 'true') continue;
+
 			note.classList.add('distill-hover-hidden');
 
 			const refEl = this.refMap.get(note);
@@ -916,7 +915,6 @@ export class SidenoteRenderer {
 					note.classList.remove('distill-sidenote-visible');
 					note.classList.add('distill-hover-hidden');
 				}, 200);
-				this.hoverTimers.push(leaveTimer);
 			};
 
 			// Show on ref hover
@@ -925,6 +923,8 @@ export class SidenoteRenderer {
 			// Keep visible while hovering the sidenote itself
 			note.addEventListener('mouseenter', show);
 			note.addEventListener('mouseleave', startHide);
+
+			note.dataset.distillHoverSetup = 'true';
 
 			this.eventCleanup.push(() => {
 				refEl.removeEventListener('mouseenter', show);
@@ -1020,16 +1020,118 @@ export class SidenoteRenderer {
 	}
 
 	/**
+	 * Create inline fallbacks for any pre-created sidenotes that were never
+	 * upgraded (and thus never got inline fallbacks). Uses the DOM marker
+	 * elements as ref points for insertion.
+	 */
+	ensureInlineFallbacks(previewSizer: HTMLElement): void {
+		// Track IDs that already have inline fallbacks (including those from render/upgrade)
+		const existingInlineIds = new Set<string>();
+		for (const n of this.inlineNotes) {
+			const sid = n.dataset.sidenoteId;
+			if (sid) existingInlineIds.add(sid);
+			const checkbox = n.querySelector('.distill-inline-toggle') as HTMLInputElement;
+			if (checkbox?.id) existingInlineIds.add(checkbox.id.replace('distill-sn-', ''));
+		}
+
+		// Build a list of available markers (by data-sidenote-id or by hash)
+		const markerById = new Map<string, HTMLElement[]>();
+		const allMarkers = previewSizer.querySelectorAll<HTMLElement>('.distill-sidenote-marker[data-sidenote-content]');
+		for (const el of Array.from(allMarkers)) {
+			// Use existing sidenote-id if set, otherwise compute hash
+			const markerId = el.dataset.sidenoteId
+				?? `custom-${this.hashContent(el.dataset.sidenoteContent!)}`;
+			if (!markerById.has(markerId)) markerById.set(markerId, []);
+			markerById.get(markerId)!.push(el);
+		}
+
+		for (const note of this.sidenotes) {
+			const id = note.dataset.sidenoteId;
+			if (!id) continue;
+			if (existingInlineIds.has(id)) continue;
+
+			// Find a ref element for this sidenote
+			let refElement: HTMLElement | null = null;
+
+			// Try direct ID match first (works for footnotes and tagged markers)
+			const byId = previewSizer.querySelector(`[data-sidenote-id="${CSS.escape(id)}"]`) as HTMLElement;
+			if (byId) {
+				// Verify no inline fallback already adjacent
+				const next = byId.nextElementSibling;
+				if (next && (next.classList.contains('distill-inline-marginnote')
+					|| next.classList.contains('distill-inline-sidenote'))) {
+					existingInlineIds.add(id);
+					continue;
+				}
+				refElement = byId;
+			}
+
+			// Try hash-based lookup (consume from queue for duplicate-content sidenotes)
+			if (!refElement) {
+				// Strip suffix like -1, -2 for duplicate IDs to find the base hash
+				const baseId = id.replace(/-\d+$/, '');
+				const queue = markerById.get(id) ?? markerById.get(baseId);
+				if (queue && queue.length > 0) {
+					const candidate = queue.shift()!;
+					const next = candidate.nextElementSibling;
+					if (next && (next.classList.contains('distill-inline-marginnote')
+						|| next.classList.contains('distill-inline-sidenote'))) {
+						existingInlineIds.add(id);
+						continue;
+					}
+					refElement = candidate;
+				}
+			}
+
+			if (!refElement) continue;
+
+			refElement.dataset.sidenoteId = id;
+
+			// Detect whether this is a numbered sidenote or a margin note
+			const numberSpan = note.querySelector('.distill-sidenote-number');
+			const isNumbered = !!numberSpan;
+			const num = isNumbered ? parseInt(numberSpan!.textContent || '0', 10) : 0;
+			const type = isNumbered ? 'sidenote' : 'marginnote';
+
+			const contentSpan = note.querySelector('.distill-sidenote-content');
+			const fakeFn = {
+				id,
+				refElement,
+				content: contentSpan?.textContent ?? '',
+				contentEl: contentSpan ? contentSpan.cloneNode(true) as HTMLElement : undefined,
+				type: type as 'sidenote' | 'marginnote',
+				icon: undefined,
+			};
+
+			const inline = this.createInlineFallback(fakeFn as ParsedFootnote, num, isNumbered);
+			inline.dataset.sidenoteId = id;
+			refElement.after(inline);
+			this.inlineNotes.push(inline);
+			existingInlineIds.add(id);
+		}
+	}
+
+	private hashContent(content: string): string {
+		let hash = 5381;
+		for (let i = 0; i < content.length; i++) {
+			hash = ((hash << 5) + hash + content.charCodeAt(i)) & 0xffffffff;
+		}
+		return (hash >>> 0).toString(36).padStart(6, '0').slice(0, 8);
+	}
+
+	/**
 	 * Clean up all rendered elements.
 	 */
 	clear(): void {
-		// Run event cleanup (listeners on ref elements we don't own)
+		// Run event cleanup (listeners on ref elements we don't own;
+		// also clears per-note hover leaveTimers via their closures)
 		for (const cleanup of this.eventCleanup) cleanup();
 		this.eventCleanup = [];
 
-		// Clear any pending hover preview timers
-		for (const timer of this.hoverTimers) clearTimeout(timer);
-		this.hoverTimers = [];
+		// Clean up hover-setup markers so re-applied hover mode works
+		for (const note of this.sidenotes) {
+			delete note.dataset.distillHoverSetup;
+		}
 
 		// Clear annotation highlight
 		if (this.highlightedAnnotation) {
@@ -1065,38 +1167,39 @@ export class SidenoteRenderer {
 		// Restore hidden footnotes sections
 		for (const section of this.hiddenFootnoteSections) {
 			if (section.isConnected) {
-				section.style.display = '';
+				section.classList.remove('distill-hidden');
 			}
 		}
 		this.hiddenFootnoteSections = [];
 
-		// Clean up data attributes and restore original ref state
-		document.querySelectorAll('[data-distill-sidenote-rendered]').forEach(el => {
-			// Restore original <a> text content (Bug 4 cleanup)
-			const anchor = el.tagName === 'A'
-				? el as HTMLAnchorElement
-				: el.querySelector('a') as HTMLAnchorElement | null;
-			if (anchor) {
-				const origText = anchor.dataset.distillOriginalText;
-				if (origText !== undefined) {
-					anchor.textContent = origText;
-					delete anchor.dataset.distillOriginalText;
-				}
-				anchor.classList.remove('distill-ref-number', 'distill-badge-circled', 'distill-badge-pill');
+		// Clean up data attributes and restore original ref state.
+		// stylizeRef() sets data-distill-original-text on <a> elements,
+		// so query by that attribute to find refs that need cleanup.
+		document.querySelectorAll<HTMLAnchorElement>('a[data-distill-original-text]').forEach(anchor => {
+			const origText = anchor.dataset.distillOriginalText;
+			if (origText !== undefined) {
+				anchor.textContent = origText;
+				anchor.removeAttribute('data-distill-original-text');
 			}
+			anchor.classList.remove('distill-ref-number', 'distill-badge-circled', 'distill-badge-pill');
 
-			el.removeAttribute('data-distill-sidenote-rendered');
-			el.removeAttribute('data-distill-sidenote-num');
-			el.removeAttribute('data-sidenote-id');
+			// Also clean up the parent ref element's attributes
+			const refEl = anchor.closest('[data-distill-sidenote-num]') ?? anchor.parentElement;
+			if (refEl) {
+				refEl.removeAttribute('data-distill-sidenote-num');
+				refEl.removeAttribute('data-sidenote-id');
+			}
 		});
 	}
 
 	destroy(): void {
-		// Restore original {>text} syntax from marker spans before clearing
-		document.querySelectorAll('span.distill-sidenote-marker[data-sidenote-content]').forEach(marker => {
-			const content = (marker as HTMLElement).dataset.sidenoteContent;
+		// Restore original {>text} or {>!icon: text} syntax from marker spans before clearing
+		document.querySelectorAll<HTMLElement>('span.distill-sidenote-marker[data-sidenote-content]').forEach(marker => {
+			const content = marker.dataset.sidenoteContent;
+			const icon = marker.dataset.sidenoteIcon;
 			if (content) {
-				const textNode = document.createTextNode(`{>${content}}`);
+				const restored = icon ? `{>!${icon}: ${content}}` : `{>${content}}`;
+				const textNode = document.createTextNode(restored);
 				marker.parentNode?.replaceChild(textNode, marker);
 			}
 		});

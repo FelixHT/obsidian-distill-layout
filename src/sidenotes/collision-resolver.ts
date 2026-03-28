@@ -20,7 +20,7 @@ export function resolveCollisions(notes: HTMLElement[], gap = 8): void {
 		const prev = notes[i - 1]!;
 		const curr = notes[i]!;
 
-		const prevBottom = parseFloat(prev.style.top) + prev.getBoundingClientRect().height;
+		const prevBottom = parseFloat(prev.style.top) + (prev.getBoundingClientRect().height || prev.offsetHeight);
 		const currTop = parseFloat(curr.style.top);
 
 		if (currTop < prevBottom + gap) {

@@ -163,6 +163,8 @@ export interface HeadingEntry {
 	top: number;
 	/** Source line number for scroll-to when heading is virtualized. */
 	line?: number;
+	/** CM6 document offset for edit-mode click-to-scroll. */
+	linePos?: number;
 }
 
 export interface ParsedFootnote {

@@ -14,6 +14,7 @@ export class EditLayoutManager {
 	private leftCol: HTMLElement | null = null;
 	private rightCol: HTMLElement | null = null;
 	private track: HTMLElement | null = null;
+	private leftTrack: HTMLElement | null = null;
 	private scrollHandler: (() => void) | null = null;
 	private cmScroller: HTMLElement | null = null;
 	private lastLayout: string | null = null;
@@ -65,11 +66,20 @@ export class EditLayoutManager {
 		const trackParent = this.settings.columnLayout === 'swapped' ? left : right;
 		trackParent.appendChild(track);
 
+		// Left track for alternating mode — mirrors the right track's scroll sync
+		let leftTrack: HTMLElement | null = null;
+		if (this.settings.columnLayout === 'alternating') {
+			leftTrack = document.createElement('div');
+			leftTrack.className = 'distill-edit-sidenote-track distill-edit-left-track';
+			left.appendChild(leftTrack);
+		}
+
 		sourceView.classList.add('distill-edit-active');
 
 		this.leftCol = left;
 		this.rightCol = right;
 		this.track = track;
+		this.leftTrack = leftTrack;
 		this.lastLayout = this.settings.columnLayout;
 
 		// Scroll sync — translate the track inversely to CM scroll
@@ -94,25 +104,14 @@ export class EditLayoutManager {
 		return this.track;
 	}
 
+	getLeftTrack(): HTMLElement | null {
+		return this.leftTrack;
+	}
+
 	private updateWidths(): void {
-		const { tocWidth, sidenoteWidth, columnLayout } = this.settings;
-
-		let leftWidth: number;
-		let rightWidth: number;
-
-		if (columnLayout === 'alternating') {
-			leftWidth = sidenoteWidth;
-			rightWidth = sidenoteWidth;
-		} else if (columnLayout === 'swapped') {
-			leftWidth = sidenoteWidth;
-			rightWidth = tocWidth;
-		} else {
-			leftWidth = tocWidth;
-			rightWidth = sidenoteWidth;
-		}
-
-		if (this.leftCol) this.leftCol.style.width = `${leftWidth}px`;
-		if (this.rightCol) this.rightCol.style.width = `${rightWidth}px`;
+		// Column widths controlled by CSS vars — remove any stale inline widths
+		if (this.leftCol) this.leftCol.style.removeProperty('width');
+		if (this.rightCol) this.rightCol.style.removeProperty('width');
 	}
 
 	/**
@@ -123,6 +122,7 @@ export class EditLayoutManager {
 		if (!this.track || !this.cmScroller) return;
 		const scrollTop = this.cmScroller.scrollTop;
 		this.track.style.transform = `translateY(${-scrollTop}px)`;
+		if (this.leftTrack) this.leftTrack.style.transform = `translateY(${-scrollTop}px)`;
 	}
 
 	/**
@@ -132,6 +132,7 @@ export class EditLayoutManager {
 	syncTrackHeight(contentHeight: number): void {
 		if (!this.track) return;
 		this.track.style.height = `${contentHeight}px`;
+		if (this.leftTrack) this.leftTrack.style.height = `${contentHeight}px`;
 	}
 
 	removeContainers(): void {
@@ -153,6 +154,7 @@ export class EditLayoutManager {
 			this.rightCol = null;
 		}
 		this.track = null;
+		this.leftTrack = null;
 		this.lastLayout = null;
 	}
 

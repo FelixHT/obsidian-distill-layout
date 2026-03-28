@@ -1,3 +1,4 @@
+import type { EditorView } from '@codemirror/view';
 import type { DistillLayoutSettings } from '../types';
 import type { EditParsedCode } from './edit-code-parser';
 
@@ -16,7 +17,7 @@ export class EditCodeRenderer {
 	render(
 		track: HTMLElement,
 		codes: EditParsedCode[],
-		cmView: import('@codemirror/view').EditorView,
+		cmView: EditorView,
 		contentOffset = 0
 	): void {
 		this.clear();
@@ -46,11 +47,11 @@ export class EditCodeRenderer {
 			// Apply max-height based on settings
 			const maxLines = this.settings.marginCodeMaxLines;
 			if (maxLines > 0) {
-				pre.style.maxHeight = `${maxLines * 1.4}em`;
-				pre.style.overflow = 'auto';
+				pre.style.setProperty('--distill-code-max-height', `${maxLines * 1.4}em`);
+				pre.classList.add('distill-overflow-auto');
 			}
 
-			el.style.position = 'absolute';
+			el.classList.add('distill-position-absolute');
 			el.style.top = `${top}px`;
 			el.dataset.refTop = `${top}px`;
 			el.dataset.refOffset = String(c.refOffset);

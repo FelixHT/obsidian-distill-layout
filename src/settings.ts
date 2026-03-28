@@ -29,7 +29,6 @@ const CSS_VAR_MAP: Record<string, string> = {
 	sidenoteTextColor: '--distill-sidenote-text',
 	sidenoteBorderColor: '--distill-sidenote-border',
 	gutterWidth: '--distill-gutter-width',
-	collapseWidth: '--distill-collapse-width',
 	sidenoteFontFamily: '--distill-sidenote-font',
 	tocColor: '--distill-toc-color',
 	tocHighlightColor: '--distill-toc-highlight',
@@ -49,12 +48,18 @@ export function applyCSSVariables(settings: DistillLayoutSettings): void {
 
 	if (settings.sidenoteBackgroundColor) {
 		root.style.setProperty('--distill-sidenote-bg', settings.sidenoteBackgroundColor);
+	} else {
+		root.style.removeProperty('--distill-sidenote-bg');
 	}
 	if (settings.sidenoteTextColor) {
 		root.style.setProperty('--distill-sidenote-text', settings.sidenoteTextColor);
+	} else {
+		root.style.removeProperty('--distill-sidenote-text');
 	}
 	if (settings.sidenoteBorderColor) {
 		root.style.setProperty('--distill-sidenote-border', settings.sidenoteBorderColor);
+	} else {
+		root.style.removeProperty('--distill-sidenote-border');
 	}
 	// Sidenote font family
 	if (settings.sidenoteFontFamily) {
@@ -126,16 +131,16 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 		// ── Style Presets (always visible) ──
 		new Setting(containerEl)
 			.setName('Style preset')
-			.setDesc('Apply a one-click theme. Manual changes switch back to Custom.')
+			.setDesc('Apply a one-click theme. Manual changes switch back to custom.')
 			.addDropdown(d => d
 				.addOption('custom', 'Custom')
 				.addOption('tufte', 'Tufte')
 				.addOption('academic', 'Academic')
 				.addOption('minimal', 'Minimal')
-				.addOption('dark-accent', 'Dark Accent')
+				.addOption('dark-accent', 'Dark accent')
 				.setValue(this.plugin.settings.stylePreset)
 				.onChange(async v => {
-					const preset = PRESETS[v];
+					const preset = PRESETS[v as keyof typeof PRESETS];
 					if (preset) {
 						Object.assign(this.plugin.settings, preset);
 						this.plugin.settings.stylePreset = v as DistillLayoutSettings['stylePreset'];
@@ -468,11 +473,11 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 		// ══════════════════════════════════════════
 		// ── Citations ──
 		// ══════════════════════════════════════════
-		const citationSection = createCollapsibleSection(containerEl, 'Citations');
+		const citationSection = createCollapsibleSection(containerEl, 'Citations (Experimental)');
 
 		new Setting(citationSection)
 			.setName('Enable citations')
-			.setDesc('Parse [@citekey] syntax and show formatted references in the margin.')
+			.setDesc('Experimental. Parse [@citekey] syntax and show formatted references in the margin.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.citationsEnabled)
 				.onChange(async v => { this.plugin.settings.citationsEnabled = v; await this.save(); })
@@ -494,7 +499,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setName('Citation style')
 			.setDesc('How citations are formatted in the margin.')
 			.addDropdown(d => d
-				.addOption('author-year', 'Author-Year')
+				.addOption('author-year', 'Author-year')
 				.addOption('numbered', 'Numbered')
 				.setValue(this.plugin.settings.citationStyle)
 				.onChange(async v => {
@@ -506,11 +511,11 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 		// ══════════════════════════════════════════
 		// ── Integrations ──
 		// ══════════════════════════════════════════
-		const integrationsSection = createCollapsibleSection(containerEl, 'Integrations');
+		const integrationsSection = createCollapsibleSection(containerEl, 'Integrations (Experimental)');
 
 		new Setting(integrationsSection)
 			.setName('Dataview margin blocks')
-			.setDesc('Render ```dataview-margin code blocks in the margin (requires Dataview plugin).')
+			.setDesc('Experimental. Render ```dataview-margin code blocks in the margin (requires Dataview plugin).')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.dataviewMarginEnabled)
 				.onChange(async v => { this.plugin.settings.dataviewMarginEnabled = v; await this.save(); })
@@ -518,7 +523,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 
 		new Setting(integrationsSection)
 			.setName('Multi-pane TOC sync')
-			.setDesc('Sync TOC highlighting across panes showing the same note.')
+			.setDesc('Experimental. Sync TOC highlighting across panes showing the same note.')
 			.addToggle(t => t
 				.setValue(this.plugin.settings.multiPaneSyncEnabled)
 				.onChange(async v => { this.plugin.settings.multiPaneSyncEnabled = v; await this.save(); })
@@ -604,6 +609,46 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 				.setTooltip('Reset to theme default')
 				.onClick(async () => {
 					this.plugin.settings.sidenoteTextColor = '';
+					await this.save();
+					this.display();
+				})
+			);
+
+		new Setting(colorSection)
+			.setName('Sidenote background color')
+			.setDesc('Background color for sidenotes. Clear to use theme default.')
+			.addColorPicker(cp => cp
+				.setValue(this.plugin.settings.sidenoteBackgroundColor || getThemeColor('--background-secondary', '#f5f5f5'))
+				.onChange(async v => {
+					this.plugin.settings.sidenoteBackgroundColor = v;
+					await this.save();
+				})
+			)
+			.addExtraButton(b => b
+				.setIcon('reset')
+				.setTooltip('Reset to theme default')
+				.onClick(async () => {
+					this.plugin.settings.sidenoteBackgroundColor = '';
+					await this.save();
+					this.display();
+				})
+			);
+
+		new Setting(colorSection)
+			.setName('Sidenote border color')
+			.setDesc('Border color for sidenotes. Clear to use theme default.')
+			.addColorPicker(cp => cp
+				.setValue(this.plugin.settings.sidenoteBorderColor || getThemeColor('--background-modifier-border', '#ddd'))
+				.onChange(async v => {
+					this.plugin.settings.sidenoteBorderColor = v;
+					await this.save();
+				})
+			)
+			.addExtraButton(b => b
+				.setIcon('reset')
+				.setTooltip('Reset to theme default')
+				.onClick(async () => {
+					this.plugin.settings.sidenoteBorderColor = '';
 					await this.save();
 					this.display();
 				})
@@ -735,11 +780,20 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 
 	}
 
+	private saveTimer: ReturnType<typeof setTimeout> | null = null;
+
 	private async save(): Promise<void> {
 		// Any manual change switches back to 'custom' preset
 		if (this.plugin.settings.stylePreset !== 'custom') {
 			this.plugin.settings.stylePreset = 'custom';
 		}
-		await this.plugin.saveSettings();
+		// Apply CSS variables immediately for visual feedback
+		applyCSSVariables(this.plugin.settings);
+		// Debounce the disk write and full refresh to avoid excessive I/O during drags
+		if (this.saveTimer) clearTimeout(this.saveTimer);
+		this.saveTimer = setTimeout(() => {
+			this.saveTimer = null;
+			this.plugin.saveSettings().catch(e => console.error('Distill Layout: failed to save settings', e));
+		}, 150);
 	}
 }

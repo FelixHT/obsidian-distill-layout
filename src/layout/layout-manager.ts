@@ -20,6 +20,7 @@ export class LayoutManager {
 	private leftCol: HTMLElement | null = null;
 	private rightCol: HTMLElement | null = null;
 	private track: HTMLElement | null = null;
+	private sizerColumnOffset = 0;
 	private leftTrack: HTMLElement | null = null;
 	private scrollHandler: (() => void) | null = null;
 	private previewView: HTMLElement | null = null;
@@ -77,7 +78,7 @@ export class LayoutManager {
 		track: HTMLElement;
 	} {
 		const currentLayout = this.settings.columnLayout;
-		const parent = previewView.closest('.workspace-leaf-content') as HTMLElement | null;
+		const parent = previewView.closest('.workspace-leaf-content');
 		if (
 			this.leftCol?.isConnected &&
 			this.rightCol?.isConnected &&
@@ -100,7 +101,7 @@ export class LayoutManager {
 
 		// Columns live in the non-scrolling parent so they don't need
 		// JS transforms to stay viewport-fixed (mirrors edit-mode approach).
-		const colParent = previewView.closest('.workspace-leaf-content') as HTMLElement ?? previewView;
+		const colParent = previewView.closest<HTMLElement>('.workspace-leaf-content') ?? previewView;
 		this.columnParent = colParent;
 
 		// Left column (TOC) — naturally fixed in the left padding
@@ -134,6 +135,9 @@ export class LayoutManager {
 		this.previewView = previewView;
 		this.lastLayout = this.settings.columnLayout;
 
+		// Compute the static offset between sizer and column origins
+		this.calibrateOffset();
+
 		// Scroll sync — translate track inversely to scroll
 		this.scrollHandler = () => this.syncScroll();
 		previewView.addEventListener('scroll', this.scrollHandler, { passive: true });
@@ -157,27 +161,14 @@ export class LayoutManager {
 	}
 
 	private updateWidths(): void {
-		const { tocWidth, sidenoteWidth, columnLayout } = this.settings;
-
-		let leftWidth: number;
-		let rightWidth: number;
-
-		if (columnLayout === 'alternating') {
-			leftWidth = sidenoteWidth;
-			rightWidth = sidenoteWidth;
-		} else if (columnLayout === 'swapped') {
-			leftWidth = sidenoteWidth;
-			rightWidth = tocWidth;
-		} else {
-			leftWidth = tocWidth;
-			rightWidth = sidenoteWidth;
-		}
-
+		// Column widths are controlled by CSS variables (--distill-margin-left/right
+		// set by ResponsiveManager, falling back to --distill-toc-width/sidenote-width).
+		// No inline widths needed — removing them lets CSS vars take effect.
 		if (this.leftCol) {
-			this.leftCol.style.width = `${leftWidth}px`;
+			this.leftCol.style.removeProperty('width');
 		}
 		if (this.rightCol) {
-			this.rightCol.style.width = `${rightWidth}px`;
+			this.rightCol.style.removeProperty('width');
 		}
 	}
 
@@ -189,11 +180,29 @@ export class LayoutManager {
 	 * so they are naturally viewport-fixed — no column transforms needed.
 	 * Only the track needs to counteract scrolling.
 	 */
+	/**
+	 * Compute and cache the static vertical offset between the sizer origin
+	 * and the column origin. Must be called once after containers are created
+	 * (and after any layout change that shifts the header/nav area).
+	 */
+	calibrateOffset(): void {
+		if (!this.track || !this.previewView) return;
+		const sizer = this.sizerEl ?? this.previewView.querySelector('.markdown-preview-sizer');
+		if (!sizer) { this.sizerColumnOffset = 0; return; }
+		// At scrollTop=0, both rects are at their natural positions.
+		// The difference is the static structural gap (view header, nav arrows, etc.)
+		const savedScroll = this.previewView.scrollTop;
+		this.sizerColumnOffset = sizer.getBoundingClientRect().top
+			- (this.track.parentElement?.getBoundingClientRect().top ?? 0)
+			+ savedScroll; // cancel out any current scroll offset from sizer's rect
+	}
+
 	syncScroll(): void {
 		if (!this.track || !this.previewView) return;
 		const st = this.previewView.scrollTop;
-		this.track.style.transform = `translateY(${-st}px)`;
-		if (this.leftTrack) this.leftTrack.style.transform = `translateY(${-st}px)`;
+		const offset = this.sizerColumnOffset;
+		this.track.style.transform = `translateY(${offset - st}px)`;
+		if (this.leftTrack) this.leftTrack.style.transform = `translateY(${offset - st}px)`;
 	}
 
 	/**
@@ -227,6 +236,8 @@ export class LayoutManager {
 	}
 
 	removeContainers(): void {
+		// Cancel any pending resize callback to prevent stale timeout firing
+		if (this.resizeTimeout) { clearTimeout(this.resizeTimeout); this.resizeTimeout = null; }
 		// Stop observing the old sizer to prevent spurious reposition calls
 		this.resizeObserver?.disconnect();
 		if (this.sizerObserver) { this.sizerObserver.disconnect(); this.sizerObserver = null; }

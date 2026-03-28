@@ -4,7 +4,7 @@ import type { DistillLayoutSettings } from './types';
  * Style presets — each defines a partial settings override.
  * Applying a preset merges its values into the current settings.
  */
-export const PRESETS: Record<string, Partial<DistillLayoutSettings>> = {
+export const PRESETS = {
 	tufte: {
 		sidenoteFontFamily: 'et-book, Palatino, "Palatino Linotype", "Palatino LT STD", "Book Antiqua", Georgia, serif',
 		sidenoteBackgroundColor: 'transparent',
@@ -59,6 +59,6 @@ export const PRESETS: Record<string, Partial<DistillLayoutSettings>> = {
 		sidenoteIconsEnabled: true,
 		progressBarEnabled: true,
 	},
-};
+} as const satisfies Record<string, Partial<DistillLayoutSettings>>;
 
-export type PresetName = keyof typeof PRESETS | 'custom';
+export type PresetName = 'custom' | keyof typeof PRESETS;

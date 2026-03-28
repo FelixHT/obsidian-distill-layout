@@ -13,16 +13,15 @@ export class CommentParser {
 		const results: ParsedComment[] = [];
 
 		// Phase A: recover existing markers
-		const existingMarkers = container.querySelectorAll(
+		const existingMarkers = container.querySelectorAll<HTMLElement>(
 			'span.distill-comment-marker[data-comment-content]'
 		);
 		for (const marker of Array.from(existingMarkers)) {
-			const htmlMarker = marker as HTMLElement;
-			const content = htmlMarker.dataset.commentContent || '';
-			const author = htmlMarker.dataset.commentAuthor || '';
-			const id = htmlMarker.dataset.commentId || '';
+			const content = marker.dataset.commentContent || '';
+			const author = marker.dataset.commentAuthor || '';
+			const id = marker.dataset.commentId || '';
 			if (content && id) {
-				results.push({ id, refElement: htmlMarker, content, author });
+				results.push({ id, refElement: marker, content, author });
 			}
 		}
 
@@ -52,7 +51,7 @@ export class CommentParser {
 			let currentText = node.textContent || '';
 
 			for (const match of matches.reverse()) {
-				const fullMatch = match[0]!;
+				const fullMatch = match[0];
 				const author = match[1]?.trim() || '';
 				const content = match[2]!.trim();
 				const index = currentText.lastIndexOf(fullMatch);

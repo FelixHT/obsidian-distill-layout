@@ -1,6 +1,11 @@
 import type { MarkdownView } from 'obsidian';
 import type { HeadingEntry, DistillLayoutSettings } from '../types';
 
+/** Obsidian internal: MarkdownView.currentMode exposes applyScroll. */
+interface MarkdownModeWithScroll {
+	applyScroll(line: number): void;
+}
+
 /**
  * Renders the TOC navigation inside the left column container.
  * Uses sticky positioning so it follows the viewport while scrolling.
@@ -71,7 +76,7 @@ export class TocRenderer {
 				onItemClick(heading);
 			} else if (heading.line != null && view && !heading.element.matches('h1, h2, h3, h4, h5, h6')) {
 				// Virtualized heading — element is proxy (previewSizer), use applyScroll
-				(view.currentMode as any).applyScroll(heading.line);
+				(view.currentMode as unknown as MarkdownModeWithScroll).applyScroll(heading.line);
 			} else {
 				heading.element.scrollIntoView({
 					behavior: this.settings.smoothScroll ? 'smooth' : 'auto',

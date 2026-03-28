@@ -7,13 +7,13 @@ export class ReadingTime {
 	/**
 	 * Render reading time into the TOC container.
 	 * @param tocContainer  The column container where TOC lives.
-	 * @param previewSizer  The preview sizer to extract text from.
+	 * @param sourceText  The full source markdown text (immune to virtualization).
 	 * @param wordsPerMinute  Reading speed setting.
 	 */
-	render(tocContainer: HTMLElement, previewSizer: HTMLElement, wordsPerMinute: number): void {
+	render(tocContainer: HTMLElement, sourceText: string, wordsPerMinute: number): void {
 		this.clear();
 
-		const text = this.extractText(previewSizer);
+		const text = this.stripMarkdown(sourceText);
 		const wordCount = this.countWords(text);
 		const minutes = Math.max(1, Math.ceil(wordCount / wordsPerMinute));
 
@@ -22,20 +22,22 @@ export class ReadingTime {
 		this.el.textContent = `${minutes} min read \u00B7 ${wordCount.toLocaleString()} words`;
 
 		const nav = tocContainer.querySelector('.distill-toc');
-		(nav || tocContainer).prepend(this.el);
+		(nav || tocContainer).appendChild(this.el);
 	}
 
-	private extractText(previewSizer: HTMLElement): string {
-		// Clone to avoid modifying the DOM
-		const clone = previewSizer.cloneNode(true) as HTMLElement;
-
-		// Remove elements we don't want to count
-		const exclude = clone.querySelectorAll('.distill-toc, .distill-sidenote, pre code, .distill-left-column, .distill-right-column');
-		for (const el of Array.from(exclude)) {
-			el.remove();
-		}
-
-		return clone.textContent || '';
+	private stripMarkdown(text: string): string {
+		return text
+			.replace(/^---[\s\S]*?---/m, '')       // frontmatter
+			.replace(/```[\s\S]*?```/g, '')         // code blocks
+			.replace(/`[^`]+`/g, '')                // inline code
+			.replace(/!\[\[.*?\]\]/g, '')            // embeds
+			.replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, '$2') // wikilinks
+			.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // markdown links
+			.replace(/^#+\s/gm, '')                  // heading markers
+			.replace(/\{\>.*?\}/g, '')               // custom sidenote syntax
+			.replace(/\{\?.*?\}/g, '')               // comment syntax
+			.replace(/\[\^[^\]]+\]:?\s?/g, '')       // footnote refs/defs
+			.replace(/[*_~`>#\-|]/g, '');            // remaining markdown chars
 	}
 
 	private countWords(text: string): number {

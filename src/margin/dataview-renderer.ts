@@ -57,7 +57,7 @@ export class DataviewRenderer {
 		this.registry.unregisterByType('dataview');
 
 		document.querySelectorAll('[data-distill-dataview-margin]').forEach(el => {
-			(el as HTMLElement).style.display = '';
+			(el as HTMLElement).classList.remove('distill-hidden');
 			el.removeAttribute('data-distill-dataview-margin');
 		});
 		document.querySelectorAll('[data-distill-dataview-rendered]').forEach(el => {

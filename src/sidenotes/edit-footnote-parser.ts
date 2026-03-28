@@ -119,14 +119,20 @@ function parseCustomSyntax(docText: string): EditParsedFootnote[] {
 	while ((match = regex.exec(docText)) !== null) {
 		const offset = match.index;
 		const line = docText.slice(0, offset).split('\n').length - 1;
+		const customId = match[2]?.trim();
 		const content = match[3]!.trim();
 
-		// Generate a deterministic ID from content
-		let hash = 5381;
-		for (let i = 0; i < content.length; i++) {
-			hash = ((hash << 5) + hash + content.charCodeAt(i)) & 0xffffffff;
+		// Use explicit pipe-style ID if provided, otherwise hash the content
+		let id: string;
+		if (customId) {
+			id = `edit-custom-${customId}`;
+		} else {
+			let hash = 5381;
+			for (let i = 0; i < content.length; i++) {
+				hash = ((hash << 5) + hash + content.charCodeAt(i)) & 0xffffffff;
+			}
+			id = `edit-custom-${(hash >>> 0).toString(36).padStart(6, '0').slice(0, 8)}`;
 		}
-		const id = `edit-custom-${(hash >>> 0).toString(36).padStart(6, '0').slice(0, 8)}`;
 
 		results.push({
 			id,

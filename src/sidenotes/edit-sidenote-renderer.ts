@@ -1,3 +1,4 @@
+import { EditorView } from '@codemirror/view';
 import type { DistillLayoutSettings } from '../types';
 import type { EditParsedFootnote } from './edit-footnote-parser';
 
@@ -31,7 +32,7 @@ export class EditSidenoteRenderer {
 	render(
 		track: HTMLElement,
 		footnotes: EditParsedFootnote[],
-		cmView: import('@codemirror/view').EditorView,
+		cmView: EditorView,
 		contentOffset = 0
 	): void {
 		this.clear();
@@ -77,7 +78,6 @@ export class EditSidenoteRenderer {
 				if (this.settings.crossRefClickEnabled) {
 					numberSpan.addEventListener('click', (e) => {
 						e.preventDefault();
-						const { EditorView } = require('@codemirror/view');
 						cmView.dispatch({
 							effects: EditorView.scrollIntoView(fn.refOffset, { y: 'center' }),
 						});
@@ -101,7 +101,7 @@ export class EditSidenoteRenderer {
 			note.appendChild(contentSpan);
 
 			// Position absolutely within the track
-			note.style.position = 'absolute';
+			note.classList.add('distill-position-absolute');
 			note.style.top = `${top}px`;
 			note.dataset.refTop = `${top}px`;
 			note.dataset.refOffset = String(fn.refOffset);
@@ -137,21 +137,14 @@ export class EditSidenoteRenderer {
 			if (note.scrollHeight <= threshold) continue;
 
 			note.classList.add('distill-sidenote-collapsed');
-			note.style.maxHeight = `${threshold}px`;
+			note.style.setProperty('--distill-collapse-height', `${threshold}px`);
 
 			const btn = document.createElement('button');
 			btn.className = 'distill-sidenote-expand';
 			btn.textContent = 'Show more';
 			btn.addEventListener('click', () => {
-				const isCollapsed = note.classList.contains('distill-sidenote-collapsed');
-				note.classList.toggle('distill-sidenote-collapsed', !isCollapsed);
-				if (isCollapsed) {
-					note.style.maxHeight = '';
-					btn.textContent = 'Show less';
-				} else {
-					note.style.maxHeight = `${threshold}px`;
-					btn.textContent = 'Show more';
-				}
+				const isCollapsed = note.classList.toggle('distill-sidenote-collapsed');
+				btn.textContent = isCollapsed ? 'Show more' : 'Show less';
 			});
 			note.appendChild(btn);
 		}

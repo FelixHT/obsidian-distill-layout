@@ -31,7 +31,7 @@ export class DataviewParser {
 			const rendered = this.findRenderedContent(pre as HTMLElement);
 
 			if (rendered) {
-				(pre as HTMLElement).style.display = 'none';
+				(pre as HTMLElement).classList.add('distill-hidden');
 				results.push({
 					id,
 					refElement: pre as HTMLElement,
@@ -71,7 +71,9 @@ export class DataviewParser {
 			const rendered = this.findRenderedContent(pre);
 			if (rendered) {
 				obs.disconnect();
-				pre.style.display = 'none';
+				const idx = this.observers.indexOf(obs);
+				if (idx !== -1) this.observers.splice(idx, 1);
+				pre.classList.add('distill-hidden');
 				onReady({
 					id,
 					refElement: pre,
@@ -86,6 +88,8 @@ export class DataviewParser {
 		// Timeout after 5 seconds
 		setTimeout(() => {
 			observer.disconnect();
+			const idx = this.observers.indexOf(observer);
+			if (idx !== -1) this.observers.splice(idx, 1);
 		}, 5000);
 	}
 

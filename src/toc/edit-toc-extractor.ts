@@ -1,4 +1,5 @@
 import type { App, MarkdownView } from 'obsidian';
+import type { EditorView } from '@codemirror/view';
 import type { HeadingEntry, DistillLayoutSettings } from '../types';
 
 /**
@@ -21,7 +22,7 @@ export function extractEditHeadings(
 	if (!cache?.headings) return [];
 
 	// Access CM6 EditorView (Obsidian internal)
-	const cmView = (view.editor as any).cm as import('@codemirror/view').EditorView | undefined;
+	const cmView = (view.editor as unknown as { cm?: EditorView }).cm;
 	if (!cmView) return [];
 
 	const headings: HeadingEntry[] = [];
@@ -51,7 +52,7 @@ export function extractEditHeadings(
 			top,
 			// Store the CM6 document offset for click-to-scroll
 			linePos: lineStart,
-		} as HeadingEntry & { linePos: number });
+		});
 	}
 
 	return headings;

@@ -10,6 +10,7 @@ export class FootnoteParser {
 	private settings: DistillLayoutSettings;
 	private app: App;
 	private pendingObservers: Map<HTMLElement, MutationObserver> = new Map();
+	private renderComponents: Component[] = [];
 
 	constructor(settings: DistillLayoutSettings, app: App) {
 		this.settings = settings;
@@ -115,16 +116,15 @@ export class FootnoteParser {
 		const results: ParsedFootnote[] = [];
 
 		// ── Phase A: recover existing markers from a previous parse ──
-		const existingMarkers = el.querySelectorAll(
+		const existingMarkers = el.querySelectorAll<HTMLElement>(
 			'span.distill-sidenote-marker[data-sidenote-content]'
 		);
 		for (const marker of Array.from(existingMarkers)) {
-			const htmlMarker = marker as HTMLElement;
-			const content = htmlMarker.dataset.sidenoteContent;
-			const id = htmlMarker.dataset.footnoteId;
-			const icon = htmlMarker.dataset.sidenoteIcon;
+			const content = marker.dataset.sidenoteContent;
+			const id = marker.dataset.footnoteId;
+			const icon = marker.dataset.sidenoteIcon;
 			if (content && id) {
-				results.push({ id, refElement: htmlMarker, content, type: 'marginnote', icon: icon || undefined });
+				results.push({ id, refElement: marker, content, type: 'marginnote', icon: icon || undefined });
 			}
 		}
 
@@ -156,14 +156,15 @@ export class FootnoteParser {
 			let currentText = node.textContent || '';
 
 			for (const match of matches.reverse()) {
-				const fullMatch = match[0]!;
+				const fullMatch = match[0];
 				const icon = match[1]?.trim() || '';   // capture group 1: icon name
+				const customId = match[2]?.trim();     // capture group 2: optional pipe-style ID
 				const content = match[3]!.trim();      // capture group 3: content (was group 2)
 				const index = currentText.lastIndexOf(fullMatch);
 				if (index === -1) continue;
 
-				// Deterministic ID from content hash (stable across re-renders)
-				const baseId = `custom-${this.hashContent(content)}`;
+				// Use explicit pipe-style ID if provided, otherwise hash the content
+				const baseId = customId ? `custom-${customId}` : `custom-${this.hashContent(content)}`;
 				const count = idCounts.get(baseId) || 0;
 				idCounts.set(baseId, count + 1);
 				const id = count > 0 ? `${baseId}-${count}` : baseId;
@@ -202,8 +203,8 @@ export class FootnoteParser {
 		// When Obsidian renders backticks as <code> elements, the {>...} pattern
 		// spans multiple DOM nodes. Phase B only matches within single text nodes.
 		// Here we check block elements' textContent for unhandled patterns.
-		const blocks = el.querySelectorAll('p, li, td, th, dt, dd');
-		const blockList: HTMLElement[] = Array.from(blocks) as HTMLElement[];
+		const blocks = el.querySelectorAll<HTMLElement>('p, li, td, th, dt, dd');
+		const blockList: HTMLElement[] = Array.from(blocks);
 		// Also check el itself if it's a block
 		if (['P', 'LI', 'TD', 'TH', 'DT', 'DD', 'DIV'].includes(el.tagName)) {
 			blockList.push(el);
@@ -214,25 +215,22 @@ export class FootnoteParser {
 			regex.lastIndex = 0;
 			let crossMatch;
 			while ((crossMatch = regex.exec(fullText)) !== null) {
-				const matchText = crossMatch[0]!;
+				const matchText = crossMatch[0];
 				const icon = crossMatch[1]?.trim() || '';
+				const customId = crossMatch[2]?.trim();
 				const content = crossMatch[3]?.trim() || '';
 				if (!content) continue;
 
 				// Skip if already handled by Phase A or B (marker with this content exists)
-				const existingMarker = block.querySelector(
-					'span.distill-sidenote-marker'
-				);
-				if (existingMarker) {
-					const markerContent = (existingMarker as HTMLElement).dataset.sidenoteContent;
-					if (markerContent === content) continue;
-				}
+				const alreadyHandled = Array.from(block.querySelectorAll<HTMLElement>('span.distill-sidenote-marker'))
+					.some(m => m.dataset.sidenoteContent === content);
+				if (alreadyHandled) continue;
 
 				// Find the DOM range: text node with "{>" prefix and text node with "}" suffix
 				const range = this.findCrossElementRange(block, matchText);
 				if (!range) continue;
 
-				const baseId = `custom-${this.hashContent(content)}`;
+				const baseId = customId ? `custom-${customId}` : `custom-${this.hashContent(content)}`;
 				const count = idCounts.get(baseId) || 0;
 				idCounts.set(baseId, count + 1);
 				const id = count > 0 ? `${baseId}-${count}` : baseId;
@@ -281,7 +279,7 @@ export class FootnoteParser {
 			offset += len;
 		}
 
-		const fullText = block.textContent || '';
+		const fullText = nodes.map(n => n.node.textContent || '').join('');
 		const matchStart = fullText.indexOf(matchText);
 		if (matchStart === -1) return null;
 		const matchEnd = matchStart + matchText.length;
@@ -445,7 +443,10 @@ export class FootnoteParser {
 			if (content) {
 				// Render markdown to HTML so bold/italic/links display correctly
 				const wrapper = document.createElement('div');
-				MarkdownRenderer.render(this.app, content, wrapper, '', new Component());
+				const comp = new Component();
+				comp.load();
+				this.renderComponents.push(comp);
+				void MarkdownRenderer.render(this.app, content, wrapper, '', comp);
 				results.push({ id, refElement: el, content, contentEl: wrapper, type: 'sidenote' });
 			}
 		}
@@ -499,5 +500,7 @@ export class FootnoteParser {
 	destroy(): void {
 		this.pendingObservers.forEach(obs => obs.disconnect());
 		this.pendingObservers.clear();
+		for (const comp of this.renderComponents) comp.unload();
+		this.renderComponents = [];
 	}
 }

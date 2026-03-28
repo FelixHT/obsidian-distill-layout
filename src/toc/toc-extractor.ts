@@ -21,7 +21,9 @@ export function extractHeadings(
 	if (!cache?.headings) return extractHeadingsFromDOM(previewSizer, settings);
 
 	const domMap = buildDomHeadingMap(previewSizer, settings.tocMaxDepth);
-	const sizerRect = previewSizer.getBoundingClientRect();
+	const scrollContainer = previewSizer.closest('.markdown-preview-view') as HTMLElement;
+	const containerRect = scrollContainer?.getBoundingClientRect() ?? previewSizer.getBoundingClientRect();
+	const scrollTop = scrollContainer?.scrollTop ?? 0;
 	const totalLines = view.data.split('\n').length || 1;
 	const headings: HeadingEntry[] = [];
 
@@ -39,9 +41,12 @@ export function extractHeadings(
 
 		let top: number;
 		if (element) {
-			top = element.getBoundingClientRect().top - sizerRect.top;
+			// Store in scroll-space: offset relative to scroll container + scrollTop
+			top = element.getBoundingClientRect().top - containerRect.top + scrollTop;
+			// Stamp heading element with ID for tooltip lookups
+			element.dataset.distillHeadingId = `distill-heading-${line}`;
 		} else {
-			// Estimate position proportionally for virtualized headings
+			// Estimate position proportionally for virtualized headings (already scroll-space)
 			top = (line / totalLines) * previewSizer.scrollHeight;
 		}
 
@@ -69,7 +74,9 @@ function extractHeadingsFromDOM(
 	).join(', ');
 
 	const elements = previewSizer.querySelectorAll(selector);
-	const sizerRect = previewSizer.getBoundingClientRect();
+	const scrollContainer = previewSizer.closest('.markdown-preview-view') as HTMLElement;
+	const containerRect = scrollContainer?.getBoundingClientRect() ?? previewSizer.getBoundingClientRect();
+	const scrollTop = scrollContainer?.scrollTop ?? 0;
 	const headings: HeadingEntry[] = [];
 
 	elements.forEach((el, index) => {
@@ -80,12 +87,13 @@ function extractHeadingsFromDOM(
 		const text = heading.textContent?.trim() || '';
 		if (!text) return;
 
+		heading.dataset.distillHeadingId = `distill-heading-${index}`;
 		headings.push({
 			id: `distill-heading-${index}`,
 			text,
 			level,
 			element: heading,
-			top: heading.getBoundingClientRect().top - sizerRect.top,
+			top: heading.getBoundingClientRect().top - containerRect.top + scrollTop,
 		});
 	});
 

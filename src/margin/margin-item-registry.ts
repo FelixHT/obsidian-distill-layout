@@ -103,7 +103,7 @@ export class MarginItemRegistry {
 		for (let i = 1; i < items.length; i++) {
 			const prev = items[i - 1]!;
 			const curr = items[i]!;
-			const prevBottom = parseFloat(prev.element.style.top) + prev.element.getBoundingClientRect().height;
+			const prevBottom = parseFloat(prev.element.style.top) + (prev.element.getBoundingClientRect().height || prev.element.offsetHeight);
 			const currTop = parseFloat(curr.element.style.top);
 			if (currTop < prevBottom + gap) {
 				curr.element.style.top = `${prevBottom + gap}px`;

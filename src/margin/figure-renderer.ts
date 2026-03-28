@@ -1,4 +1,4 @@
-import type { DistillLayoutSettings, MarginItem } from '../types';
+import type { DistillLayoutSettings } from '../types';
 import type { MarginItemRegistry } from './margin-item-registry';
 import type { ParsedFigure } from './figure-parser';
 
@@ -13,6 +13,7 @@ export class FigureRenderer {
 	private inlineFigures: HTMLElement[] = [];
 	/** Track rendered figure IDs in memory — immune to Obsidian section virtualization. */
 	private renderedIds = new Set<string>();
+	private cleared = false;
 
 	constructor(settings: DistillLayoutSettings, registry: MarginItemRegistry) {
 		this.settings = settings;
@@ -29,6 +30,7 @@ export class FigureRenderer {
 		sizerEl: HTMLElement,
 		column: 'left' | 'right' = 'right'
 	): void {
+		this.cleared = false;
 		const sizerRect = sizerEl.getBoundingClientRect();
 
 		for (const fig of figures) {
@@ -58,8 +60,9 @@ export class FigureRenderer {
 			const img = document.createElement('img');
 			img.src = fig.imgSrc;
 			img.alt = fig.caption || '';
-			img.style.maxHeight = `${this.settings.marginFigureMaxHeight}px`;
+			img.style.setProperty('--distill-figure-max-height', `${this.settings.marginFigureMaxHeight}px`);
 			img.addEventListener('load', () => {
+				if (this.cleared) return;
 				// Reposition after image loads
 				this.registry.resolveAll();
 			}, { once: true });
@@ -107,6 +110,7 @@ export class FigureRenderer {
 	}
 
 	clear(): void {
+		this.cleared = true;
 		for (const fig of this.figures) fig.remove();
 		for (const inline of this.inlineFigures) inline.remove();
 		this.figures = [];
@@ -119,7 +123,7 @@ export class FigureRenderer {
 			el.removeAttribute('data-distill-figure-rendered');
 		});
 		document.querySelectorAll('[data-distill-figure-parsed]').forEach(el => {
-			(el as HTMLElement).style.display = '';
+			(el as HTMLElement).classList.remove('distill-hidden');
 			el.removeAttribute('data-distill-figure-parsed');
 		});
 	}

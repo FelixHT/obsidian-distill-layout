@@ -1,4 +1,5 @@
 import { MarkdownView, Plugin } from 'obsidian';
+import { EditorView } from '@codemirror/view';
 import { DEFAULT_SETTINGS, DistillLayoutSettings, HeadingEntry } from './types';
 import { DistillLayoutSettingTab, applyCSSVariables, removeCSSVariables } from './settings';
 import { LayoutManager } from './layout/layout-manager';
@@ -89,6 +90,7 @@ export default class DistillLayoutPlugin extends Plugin {
 	private deferredSections: HTMLElement[] = [];
 	private sectionObserverCleanup: (() => void) | null = null;
 	private sweepIntervalId: ReturnType<typeof setInterval> | null = null;
+	private unloaded = false;
 
 	/** Track last mode to detect mode switches → full refresh */
 	private lastViewMode: DistillViewMode | null = null;
@@ -153,7 +155,7 @@ export default class DistillLayoutPlugin extends Plugin {
 
 		// Load bibliography if configured
 		if (this.settings.citationsEnabled && this.settings.citationBibPath) {
-			this.citationParser.loadBibFile(this.settings.citationBibPath);
+			void this.citationParser.loadBibFile(this.settings.citationBibPath);
 		}
 
 		// Enable body class for CSS scoping + CSS variables
@@ -164,27 +166,24 @@ export default class DistillLayoutPlugin extends Plugin {
 		// Settings tab
 		this.addSettingTab(new DistillLayoutSettingTab(this.app, this));
 
-		// Post-processor for margin content (runs per-section in reading view)
-		if (this.settings.sidenotesEnabled
-			|| this.settings.marginFiguresEnabled
-			|| this.settings.marginCodeEnabled
-			|| this.settings.marginCommentsEnabled
-			|| this.settings.citationsEnabled
-			|| this.settings.dataviewMarginEnabled) {
-			this.registerMarkdownPostProcessor((el, ctx) => {
-				const gen = this.refreshId;
-				// Double-rAF to wait for DOM layout
+		// Post-processor for margin content (runs per-section in reading view).
+		// Registered unconditionally so settings toggles take effect without reload.
+		this.registerMarkdownPostProcessor((el, ctx) => {
+			const gen = this.refreshId;
+			// Double-rAF to wait for DOM layout
+			requestAnimationFrame(() => {
 				requestAnimationFrame(() => {
-					requestAnimationFrame(() => {
-						if (gen !== this.refreshId) {
-							if (el.isConnected) this.deferredSections.push(el);
-							return;
+					if (this.unloaded) return;
+					if (gen !== this.refreshId) {
+						if (el.isConnected && this.deferredSections.length < 200) {
+							this.deferredSections.push(el);
 						}
-						this.processSection(el);
-					});
+						return;
+					}
+					this.processSection(el);
 				});
 			});
-		}
+		});
 
 		// Workspace events for TOC + full layout
 		this.registerEvent(
@@ -220,17 +219,17 @@ export default class DistillLayoutPlugin extends Plugin {
 			name: 'Toggle TOC',
 			callback: () => {
 				this.settings.tocEnabled = !this.settings.tocEnabled;
-				this.saveSettings();
+				void this.saveSettings();
 				this.refresh();
 			},
 		});
 
 		this.addCommand({
 			id: 'toggle-sidenotes',
-			name: 'Toggle Sidenotes',
+			name: 'Toggle sidenotes',
 			callback: () => {
 				this.settings.sidenotesEnabled = !this.settings.sidenotesEnabled;
-				this.saveSettings();
+				void this.saveSettings();
 				this.refresh();
 			},
 		});
@@ -240,6 +239,7 @@ export default class DistillLayoutPlugin extends Plugin {
 	}
 
 	onunload(): void {
+		this.unloaded = true;
 		if (this.debounceTimer) clearTimeout(this.debounceTimer);
 		if (this.repositionTimer) clearTimeout(this.repositionTimer);
 		this.teardown();
@@ -311,7 +311,7 @@ export default class DistillLayoutPlugin extends Plugin {
 
 		// Reload bibliography if path changed
 		if (this.settings.citationsEnabled && this.settings.citationBibPath) {
-			this.citationParser.loadBibFile(this.settings.citationBibPath);
+			void this.citationParser.loadBibFile(this.settings.citationBibPath);
 		}
 
 		// Re-render so layout/column changes take effect immediately
@@ -335,12 +335,15 @@ export default class DistillLayoutPlugin extends Plugin {
 	}
 
 	private refresh(): void {
-		this.debounceTimer = null;
 		const id = ++this.refreshId;
 
 		// Double-rAF ensures the reading view DOM is fully rendered
 		requestAnimationFrame(() => {
 			requestAnimationFrame(() => {
+				if (this.unloaded) return;
+				// Null debounceTimer inside the rAF so debouncedReposition()
+				// correctly detects a pending refresh during the async window.
+				this.debounceTimer = null;
 				if (id !== this.refreshId) return; // stale, skip
 				this.doRefresh();
 			});
@@ -383,17 +386,17 @@ export default class DistillLayoutPlugin extends Plugin {
 		const previewSizer = previewView.querySelector('.markdown-preview-sizer') as HTMLElement;
 		if (!previewSizer) return;
 
-		// Snapshot the current refreshId as the generation for section stamping.
-		// Unlike refreshId (bumped by every debouncedRefresh), sectionGenId only
-		// advances on full refreshes — preventing cascading re-processing.
-		this.sectionGenId = this.refreshId;
-
 		// Cache source text for processSection (avoids reliance on getActiveViewOfType
 		// which can return null in multi-pane setups or when focus shifts)
 		this.cachedSourceText = view.data;
 
 		// Clear old content before rebuilding (containers stay)
 		this.clearContent();
+
+		// Snapshot the current refreshId as the generation for section stamping.
+		// Must be set AFTER clearContent() so rAF callbacks from the old generation
+		// don't stamp sections with the new gen before old stamps are cleared.
+		this.sectionGenId = this.refreshId;
 
 		// Create/reuse column containers (children of previewView, with scroll-synced track)
 		const { left, right, track } = this.layout.ensureContainers(previewView, previewSizer);
@@ -428,7 +431,7 @@ export default class DistillLayoutPlugin extends Plugin {
 
 			// ── Reading Time ──
 			if (this.settings.readingTimeEnabled) {
-				this.readingTime.render(tocContainer, previewSizer, this.settings.wordsPerMinute);
+				this.readingTime.render(tocContainer, view.data, this.settings.wordsPerMinute);
 			}
 
 			// ── TOC Section Previews ──
@@ -480,13 +483,15 @@ export default class DistillLayoutPlugin extends Plugin {
 		// ── Sidenotes (full-document pass) ──
 		if (this.settings.sidenotesEnabled) {
 			const currentRefreshId = this.refreshId;
+			// Capture file path now — view.file may change by the time the callback fires
+			const filePath = view.file?.path;
 
 			const footnotes = this.footnoteParser.parseFullDocument(previewView, (lateFootnotes) => {
 				if (currentRefreshId !== this.refreshId) return;
 				this.sidenoteRenderer.render(sidenoteTrack, lateFootnotes, previewSizer, altTrack);
-				if (this.settings.sidenoteLinksEnabled && view.file) {
-					for (const el of Array.from(sidenoteTrack.querySelectorAll('.distill-sidenote'))) {
-						this.sidenoteLinkProcessor.process(el as HTMLElement, view.file.path, this.settings.sidenoteBacklinks);
+				if (this.settings.sidenoteLinksEnabled && filePath) {
+					for (const el of Array.from(sidenoteTrack.querySelectorAll<HTMLElement>('.distill-sidenote'))) {
+						this.sidenoteLinkProcessor.process(el, filePath, this.settings.sidenoteBacklinks);
 					}
 				}
 				this.registry.resolveAll();
@@ -504,10 +509,10 @@ export default class DistillLayoutPlugin extends Plugin {
 				this.sidenoteRenderer.render(sidenoteTrack, all, previewSizer, altTrack);
 
 				if (this.settings.sidenoteLinksEnabled && view.file) {
-					const sidenoteEls = sidenoteTrack.querySelectorAll('.distill-sidenote');
+					const sidenoteEls = sidenoteTrack.querySelectorAll<HTMLElement>('.distill-sidenote');
 					for (const el of Array.from(sidenoteEls)) {
 						this.sidenoteLinkProcessor.process(
-							el as HTMLElement,
+							el,
 							view.file.path,
 							this.settings.sidenoteBacklinks
 						);
@@ -614,21 +619,23 @@ export default class DistillLayoutPlugin extends Plugin {
 		// Runs every 500ms until the next full refresh invalidates sectionGenId.
 		if (this.sweepIntervalId) { clearInterval(this.sweepIntervalId); this.sweepIntervalId = null; }
 		const sweepGenId = this.sectionGenId;
-		this.sweepIntervalId = setInterval(() => {
+		const sweepId = setInterval(() => {
 			if (this.sectionGenId !== sweepGenId) {
-				clearInterval(this.sweepIntervalId!);
-				this.sweepIntervalId = null;
+				clearInterval(sweepId);
+				// Only null the field if it still points to this interval
+				if (this.sweepIntervalId === sweepId) this.sweepIntervalId = null;
 				return;
 			}
 			const allSections = previewSizer.querySelectorAll('.markdown-preview-section');
 			for (const s of Array.from(allSections)) {
 				const section = s as HTMLElement;
 				if (section.dataset.distillProcessedGen === String(this.sectionGenId)) continue;
-				if (section.childElementCount > 0 || section.textContent!.trim().length > 0) {
+				if (section.childElementCount > 0 || (section.textContent ?? '').trim().length > 0) {
 					this.processSection(section);
 				}
 			}
 		}, 500);
+		this.sweepIntervalId = sweepId;
 
 		// Process sections whose post-processor callbacks were deferred during refresh
 		if (this.deferredSections.length > 0) {
@@ -641,6 +648,13 @@ export default class DistillLayoutPlugin extends Plugin {
 
 		// Initial scroll sync
 		this.layout.syncScroll();
+
+		// ── Inline fallbacks for pre-created sidenotes ──
+		// Pre-created sidenotes skip render() (ID already in renderedIds) and
+		// never get inline fallbacks. Create them now that DOM markers exist.
+		if (this.settings.sidenotesEnabled) {
+			this.sidenoteRenderer.ensureInlineFallbacks(previewSizer);
+		}
 
 		// ── Sidenote Animations (Phase 1) ──
 		if (this.settings.sidenoteAnimations) {
@@ -665,8 +679,8 @@ export default class DistillLayoutPlugin extends Plugin {
 		const cmScroller = cmEditor.querySelector('.cm-scroller') as HTMLElement;
 		if (!cmScroller) return;
 
-		// Access CM6 EditorView
-		const cmView = (view.editor as any).cm as import('@codemirror/view').EditorView | undefined;
+		// Access CM6 EditorView (Obsidian internal)
+		const cmView = (view.editor as unknown as { cm?: EditorView }).cm;
 		if (!cmView) return;
 
 		// Clear previous edit content
@@ -687,12 +701,10 @@ export default class DistillLayoutPlugin extends Plugin {
 			const headings = extractEditHeadings(this.app, view, this.settings);
 
 			// Click callback: use CM6-native scrolling
-			const onItemClick = (heading: any) => {
-				const linePos = heading.linePos as number | undefined;
-				if (linePos != null) {
-					const { EditorView } = require('@codemirror/view');
+			const onItemClick = (heading: HeadingEntry) => {
+				if (heading.linePos != null) {
 					cmView.dispatch({
-						effects: EditorView.scrollIntoView(linePos, { y: 'start' }),
+						effects: EditorView.scrollIntoView(heading.linePos, { y: 'start' }),
 					});
 				}
 			};
@@ -781,7 +793,7 @@ export default class DistillLayoutPlugin extends Plugin {
 	 */
 	private setupEditScrollReposition(
 		cmScroller: HTMLElement,
-		cmView: import('@codemirror/view').EditorView
+		cmView: EditorView
 	): void {
 		// Clean up any previous listener (clearEditContent also does this,
 		// but guard against double-attach within the same refresh cycle).
@@ -794,6 +806,7 @@ export default class DistillLayoutPlugin extends Plugin {
 			if (rafId !== null) return; // already scheduled
 			rafId = requestAnimationFrame(() => {
 				rafId = null;
+				if (this.unloaded) return;
 				this.repositionEditItems(cmView);
 			});
 		};
@@ -812,7 +825,7 @@ export default class DistillLayoutPlugin extends Plugin {
 	 * no DOM creation, no re-parsing — just coordinate updates.
 	 */
 	private repositionEditItems(
-		cmView: import('@codemirror/view').EditorView
+		cmView: EditorView
 	): void {
 		const track = this.editLayout.getTrack();
 		if (!track) return;
@@ -865,7 +878,7 @@ export default class DistillLayoutPlugin extends Plugin {
 	}
 
 	private hideEditFigureEmbeds(
-		cmView: import('@codemirror/view').EditorView,
+		cmView: EditorView,
 		figures: EditParsedFigure[],
 		displayMode: 'margin-only' | 'both' | 'inline-only'
 	): void {
@@ -873,11 +886,13 @@ export default class DistillLayoutPlugin extends Plugin {
 		const embeds = cmContent.querySelectorAll('.internal-embed');
 
 		if (displayMode === 'margin-only') {
+			const docLen = cmView.state.doc.length;
 			for (const fig of figures) {
-				const lineBlock = cmView.lineBlockAt(fig.refOffset);
+				const safeOffset = Math.min(fig.refOffset, docLen);
+				const lineBlock = cmView.lineBlockAt(safeOffset);
 				for (const embed of Array.from(embeds)) {
 					const embedRect = embed.getBoundingClientRect();
-					const lineTop = cmView.coordsAtPos(fig.refOffset)?.top ?? -1;
+					const lineTop = cmView.coordsAtPos(safeOffset)?.top ?? -1;
 					if (lineTop >= 0 && Math.abs(embedRect.top - lineTop) < lineBlock.height) {
 						(embed as HTMLElement).classList.add('distill-edit-figure-hidden');
 					}
@@ -893,12 +908,16 @@ export default class DistillLayoutPlugin extends Plugin {
 	private debouncedReposition(): void {
 		if (this.debounceTimer) return; // refresh pending — it's a superset
 		if (this.repositionTimer) clearTimeout(this.repositionTimer);
-		this.repositionTimer = setTimeout(() => this.reposition(), 100);
+		this.repositionTimer = setTimeout(() => {
+			this.repositionTimer = null;
+			this.reposition();
+		}, 100);
 	}
 
 	private reposition(): void {
 		const id = ++this.repositionId;
 		requestAnimationFrame(() => {
+			if (this.unloaded) return;
 			if (id !== this.repositionId) return;
 			this.doReposition();
 		});
@@ -936,7 +955,7 @@ export default class DistillLayoutPlugin extends Plugin {
 		if (!previewSizer) return;
 
 		// In narrow mode columns are display:none — skip repositioning
-		if (previewView.classList.contains('distill-narrow')) return;
+		if (leafContent.classList.contains('distill-narrow')) return;
 
 		// No containers, or containers on a different previewView (tab switch) → full refresh
 		const layoutR = this.settings.columnLayout;
@@ -945,11 +964,8 @@ export default class DistillLayoutPlugin extends Plugin {
 			: this.layout.getLeft();
 		const columnParent = this.layout.getColumnParent();
 		if (!sidenoteCol?.isConnected || sidenoteCol.parentElement !== columnParent) {
-			const id = ++this.refreshId;
-			requestAnimationFrame(() => {
-				if (id !== this.refreshId) return;
-				this.doRefresh();
-			});
+			// Use debouncedRefresh (double-rAF) instead of single rAF to ensure DOM is settled
+			this.debouncedRefresh();
 			return;
 		}
 
@@ -984,7 +1000,9 @@ export default class DistillLayoutPlugin extends Plugin {
 		const altContainer = isAlt ? this.layout.getLeftTrack() ?? undefined : undefined;
 		const previewSizer = previewView.querySelector('.markdown-preview-sizer') as HTMLElement;
 		if (!sidenoteTrack || !previewSizer) {
-			if (el.isConnected) this.deferredSections.push(el);
+			if (el.isConnected && this.deferredSections.length < 200) {
+				this.deferredSections.push(el);
+			}
 			return;
 		}
 
@@ -1092,9 +1110,10 @@ export default class DistillLayoutPlugin extends Plugin {
 			// was found — un-stamped sections can be retried when the virtualizer
 			// populates them with real content later.
 			el.dataset.distillProcessedGen = String(this.sectionGenId);
-			// Renumber sidenotes: late-arriving sections may have changed the count
+			// Renumber sidenotes and create any missing inline fallbacks
 			if (this.settings.sidenotesEnabled) {
 				this.sidenoteRenderer.renumber(previewSizer);
+				this.sidenoteRenderer.ensureInlineFallbacks(previewSizer);
 			}
 			this.registry.resolveAll();
 			this.layout.syncTrackHeight(previewSizer.scrollHeight);
@@ -1109,27 +1128,38 @@ export default class DistillLayoutPlugin extends Plugin {
 		const headingEls = sectionEl.querySelectorAll('h1, h2, h3, h4, h5, h6');
 		if (headingEls.length === 0 || !this.cachedHeadings) return;
 
-		const sizerRect = previewSizer.getBoundingClientRect();
+		const scrollContainer = previewSizer.closest('.markdown-preview-view') as HTMLElement;
+		const containerRect = scrollContainer?.getBoundingClientRect() ?? previewSizer.getBoundingClientRect();
+		const scrollTop = scrollContainer?.scrollTop ?? 0;
 		let didUpdate = false;
+
+		// Build a consume-queue per text to handle duplicate heading names correctly
+		const queue = new Map<string, HeadingEntry[]>();
+		for (const h of this.cachedHeadings) {
+			if (h.element === previewSizer) {
+				if (!queue.has(h.text)) queue.set(h.text, []);
+				queue.get(h.text)!.push(h);
+			}
+		}
 
 		for (const el of Array.from(headingEls)) {
 			const heading = el as HTMLElement;
 			const text = heading.textContent?.trim();
 			if (!text) continue;
 
-			// Find a matching virtualized entry (element is previewSizer proxy)
-			const match = this.cachedHeadings.find(
-				h => h.element === previewSizer && h.text === text
-			);
+			const match = queue.get(text)?.shift();
 			if (match) {
 				match.element = heading;
-				match.top = heading.getBoundingClientRect().top - sizerRect.top;
+				// Store in scroll-space (absolute document position) for correct threshold comparison
+				match.top = heading.getBoundingClientRect().top - containerRect.top + scrollTop;
+				heading.dataset.distillHeadingId = match.id;
 				didUpdate = true;
 			}
 		}
 
 		if (didUpdate) {
 			this.tocTracker.updateHeadings(this.cachedHeadings);
+			this.tocTracker.refresh();
 		}
 	}
 
@@ -1200,7 +1230,7 @@ export default class DistillLayoutPlugin extends Plugin {
 					const section = s as HTMLElement;
 					if (section.parentElement !== previewSizer) continue;
 					if (section.dataset.distillProcessedGen === String(this.sectionGenId)) continue;
-					if (section.childElementCount > 0 || section.textContent!.trim().length > 0) {
+					if (section.childElementCount > 0 || (section.textContent ?? '').trim().length > 0) {
 						pendingSections.add(section);
 					}
 				}
@@ -1219,7 +1249,7 @@ export default class DistillLayoutPlugin extends Plugin {
 				if (!section) continue;
 				if (section.parentElement !== previewSizer) continue;
 				if (section.dataset.distillProcessedGen === String(this.sectionGenId)) continue;
-				if (section.childElementCount > 0 || section.textContent!.trim().length > 0) {
+				if (section.childElementCount > 0 || (section.textContent ?? '').trim().length > 0) {
 					pendingSections.add(section);
 				}
 			}
@@ -1288,7 +1318,6 @@ export default class DistillLayoutPlugin extends Plugin {
 
 	/** Full teardown: clears content AND removes containers (for unload/mode-switch). */
 	private teardown(): void {
-		if (this.sweepIntervalId) { clearInterval(this.sweepIntervalId); this.sweepIntervalId = null; }
 		this.clearContent();
 		this.deferredSections = [];
 		this.responsive.disconnect();

@@ -37,8 +37,8 @@ export class ProgressBar {
 		if (!this.fillEl || !this.scrollContainer) return;
 		const { scrollTop, scrollHeight, clientHeight } = this.scrollContainer;
 		const maxScroll = scrollHeight - clientHeight;
-		const progress = maxScroll > 0 ? Math.min(scrollTop / maxScroll, 1) : 0;
-		this.fillEl.style.width = `${progress * 100}%`;
+		const progress = maxScroll > 0 ? Math.min(scrollTop / maxScroll, 1) : 1;
+		this.fillEl.style.transform = `scaleX(${progress})`;
 	}
 
 	clear(): void {

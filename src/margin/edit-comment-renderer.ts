@@ -1,3 +1,4 @@
+import type { EditorView } from '@codemirror/view';
 import type { DistillLayoutSettings } from '../types';
 import type { EditParsedComment } from './edit-comment-parser';
 
@@ -16,7 +17,7 @@ export class EditCommentRenderer {
 	render(
 		track: HTMLElement,
 		comments: EditParsedComment[],
-		cmView: import('@codemirror/view').EditorView,
+		cmView: EditorView,
 		contentOffset = 0
 	): void {
 		this.clear();
@@ -53,7 +54,7 @@ export class EditCommentRenderer {
 			contentSpan.textContent = c.content;
 			el.appendChild(contentSpan);
 
-			el.style.position = 'absolute';
+			el.classList.add('distill-position-absolute');
 			el.style.top = `${top}px`;
 			el.dataset.refTop = `${top}px`;
 			el.dataset.refOffset = String(c.refOffset);

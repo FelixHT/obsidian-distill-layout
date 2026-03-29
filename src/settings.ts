@@ -399,7 +399,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setName('Sidenote font family')
 			.setDesc('Custom font for sidenotes (leave empty to inherit).')
 			.addText(t => t
-				.setPlaceholder('georgia, serif')
+				.setPlaceholder('Georgia, serif')
 				.setValue(this.plugin.settings.sidenoteFontFamily)
 				.onChange(v => {
 					this.plugin.settings.sidenoteFontFamily = v;
@@ -485,9 +485,9 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 
 		new Setting(citationSection)
 			.setName('Bibliography file path')
-			.setDesc('Vault path to a .bib file (e.g., references.bib).')
+			.setDesc('Vault path to a .bib file (e.g., References.bib).')
 			.addText(t => t
-				.setPlaceholder('references.bib')
+				.setPlaceholder('References.bib')
 				.setValue(this.plugin.settings.citationBibPath)
 				.onChange(v => {
 					this.plugin.settings.citationBibPath = v;

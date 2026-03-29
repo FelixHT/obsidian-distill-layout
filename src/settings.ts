@@ -178,7 +178,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 
 		new Setting(tocSection)
 			.setName('Max heading depth')
-			.setDesc('Maximum heading level to include (1 = H1 only, 3 = H1-H3, etc.).')
+			.setDesc('Maximum heading level to include (1 = h1 only, 3 = h1-h3, etc.).')
 			.addSlider(s => s
 				.setLimits(1, 6, 1)
 				.setValue(this.plugin.settings.tocMaxDepth)
@@ -399,7 +399,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 			.setName('Sidenote font family')
 			.setDesc('Custom font for sidenotes (leave empty to inherit).')
 			.addText(t => t
-				.setPlaceholder('e.g. Georgia, serif')
+				.setPlaceholder('georgia, serif')
 				.setValue(this.plugin.settings.sidenoteFontFamily)
 				.onChange(v => {
 					this.plugin.settings.sidenoteFontFamily = v;
@@ -485,7 +485,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 
 		new Setting(citationSection)
 			.setName('Bibliography file path')
-			.setDesc('Path to a .bib file in the vault (e.g. references.bib).')
+			.setDesc('Vault path to a .bib file (e.g., references.bib).')
 			.addText(t => t
 				.setPlaceholder('references.bib')
 				.setValue(this.plugin.settings.citationBibPath)

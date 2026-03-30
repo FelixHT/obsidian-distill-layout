@@ -485,7 +485,7 @@ export class DistillLayoutSettingTab extends PluginSettingTab {
 
 		new Setting(citationSection)
 			.setName('Bibliography file path')
-			.setDesc('Vault path to a .bib file (e.g., References.bib).')
+			.setDesc('Vault path to a .bib file (e.g., references.bib).')
 			.addText(t => t
 				.setPlaceholder('References.bib')
 				.setValue(this.plugin.settings.citationBibPath)
